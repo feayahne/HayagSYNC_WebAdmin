@@ -27,6 +27,7 @@ import CommunityServicePage from './pages/CommunityServicePage';
 import ExpulsionsPage from './pages/ExpulsionsPage';
 import ReportsExportPage from './pages/ReportsExportPage';
 import AuditLogPage from './pages/AuditLogPage';
+import EtlManagementPage from './pages/EtlManagementPage';
 import SettingsPage from './pages/SettingsPage';
 
 // Icons
@@ -155,6 +156,8 @@ function MainApp() {
         return <ReportsExportPage onGenerateSummons={handleGenerateSummons} />;
       case 'audit-logs':
         return <AuditLogPage />;
+      case 'etl-sync':
+        return <EtlManagementPage />;
       case 'settings':
         return <SettingsPage />;
       default:
