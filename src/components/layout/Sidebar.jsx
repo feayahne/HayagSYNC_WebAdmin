@@ -12,7 +12,8 @@ import {
   Settings,
   Shield,
   LogOut,
-  Building2
+  Building2,
+  Database
 } from 'lucide-react';
 
 export default function Sidebar({ activeTab, setActiveTab }) {
@@ -73,6 +74,11 @@ export default function Sidebar({ activeTab, setActiveTab }) {
       id: 'audit-logs',
       label: 'Audit Log',
       icon: Shield,
+    },
+    {
+      id: 'etl-sync',
+      label: 'ETL Data Sync',
+      icon: Database,
     },
     {
       id: 'settings',
