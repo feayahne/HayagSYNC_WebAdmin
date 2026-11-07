@@ -6,13 +6,7 @@ import {
   UploadCloud,
   CheckCircle2,
   AlertTriangle,
-  XCircle,
-  FileSpreadsheet,
-  Clock,
   Database,
-  ArrowRight,
-  ShieldAlert,
-  UserCheck
 } from 'lucide-react';
 
 export default function EtlManagementPage() {
@@ -23,6 +17,12 @@ export default function EtlManagementPage() {
   const [activeTab, setActiveTab] = useState('runs'); // 'runs', 'rejected', 'relationships'
   const [isRunningSync, setIsRunningSync] = useState(false);
   const [syncFeedback, setSyncFeedback] = useState(null);
+  const [uploadCategory, setUploadCategory] = useState('students');
+  const [uploadFile, setUploadFile] = useState(null);
+  const [uploadRows, setUploadRows] = useState([]);
+  const [uploadError, setUploadError] = useState('');
+  const [isReadingFile, setIsReadingFile] = useState(false);
+  const [isImportingFile, setIsImportingFile] = useState(false);
 
   // Fetch ETL history
   const fetchEtlData = async () => {
@@ -60,6 +60,119 @@ export default function EtlManagementPage() {
   useEffect(() => {
     fetchEtlData();
   }, []);
+
+  const normalizeHeader = (value) => String(value).trim().toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_|_$/g, '');
+
+  const fieldAliases = {
+    students: {
+      lrn: ['lrn', 'learner_reference_number'],
+      name: ['name', 'student_name', 'full_name'],
+      grade: ['grade', 'grade_level'],
+      section: ['section', 'assigned_section'],
+      guardian_name: ['guardian_name', 'parent_name'],
+      guardian_email: ['guardian_email', 'parent_email'],
+      guardian_phone: ['guardian_phone', 'parent_phone', 'phone_number']
+    },
+    staff: {
+      name: ['name', 'staff_name', 'full_name'],
+      email: ['email', 'email_address'],
+      role: ['role', 'position'],
+      assigned_section: ['assigned_section', 'section']
+    }
+  };
+
+  const requiredFields = {
+    students: ['lrn', 'name', 'grade', 'section'],
+    staff: ['name', 'email', 'role', 'assigned_section']
+  };
+
+  const handleExcelFile = async (event) => {
+    const file = event.target.files?.[0];
+    setUploadFile(null);
+    setUploadRows([]);
+    setUploadError('');
+    if (!file) return;
+
+    if (!/\.xlsx?$/i.test(file.name)) {
+      setUploadError('Pumili ng Excel file na .xlsx o .xls.');
+      return;
+    }
+    if (file.size > 10 * 1024 * 1024) {
+      setUploadError('Hanggang 10 MB lang ang puwedeng i-upload.');
+      return;
+    }
+
+    setIsReadingFile(true);
+    try {
+      const XLSX = await import('xlsx');
+      const workbook = XLSX.read(await file.arrayBuffer(), { type: 'array' });
+      const firstSheet = workbook.Sheets[workbook.SheetNames[0]];
+      const sourceRows = firstSheet ? XLSX.utils.sheet_to_json(firstSheet, { defval: '', raw: false }) : [];
+      const aliases = fieldAliases[uploadCategory];
+      const rows = sourceRows.map((sourceRow) => {
+        const normalizedRow = Object.fromEntries(
+          Object.entries(sourceRow).map(([header, value]) => [normalizeHeader(header), String(value).trim()])
+        );
+        return Object.fromEntries(
+          Object.entries(aliases).map(([field, names]) => [
+            field,
+            normalizedRow[names.find((name) => Object.hasOwn(normalizedRow, name))] || ''
+          ])
+        );
+      }).filter((row) => Object.values(row).some(Boolean));
+
+      if (rows.length === 0) {
+        setUploadError('Walang mababasang data sa unang worksheet ng file.');
+        return;
+      }
+
+      setUploadFile(file);
+      setUploadRows(rows);
+    } catch (error) {
+      setUploadError(`Hindi mabasa ang Excel file: ${error.message}`);
+    } finally {
+      setIsReadingFile(false);
+    }
+  };
+
+  const handleImportExcel = async () => {
+    const missingRows = uploadRows.flatMap((row, index) => {
+      const missing = requiredFields[uploadCategory].filter((field) => !row[field]);
+      return missing.length ? [`Row ${index + 2}: missing ${missing.join(', ')}`] : [];
+    });
+    if (missingRows.length) {
+      setUploadError(`Ayusin muna ang required fields. ${missingRows.slice(0, 5).join('; ')}${missingRows.length > 5 ? `; at ${missingRows.length - 5} pang row` : ''}`);
+      return;
+    }
+
+    setIsImportingFile(true);
+    setUploadError('');
+    setSyncFeedback(null);
+    try {
+      const payload = {
+        students: uploadCategory === 'students' ? uploadRows : [],
+        staff: uploadCategory === 'staff' ? uploadRows : []
+      };
+      const { data, error } = await supabase.rpc('run_institutional_sync_etl', {
+        p_batch_payload: payload,
+        p_triggered_by: currentUser?.name || 'Administrator',
+        p_trigger_type: 'MANUAL'
+      });
+
+      if (error) throw error;
+      setSyncFeedback({
+        success: true,
+        message: `Import complete. Processed: ${data?.total_processed ?? uploadRows.length}, Inserted: ${data?.inserted ?? 0}, Updated: ${data?.updated ?? 0}, Failed: ${data?.failed ?? 0}`
+      });
+      setUploadFile(null);
+      setUploadRows([]);
+      await fetchEtlData();
+    } catch (error) {
+      setUploadError(`Hindi na-import ang file: ${error.message}`);
+    } finally {
+      setIsImportingFile(false);
+    }
+  };
 
   // Trigger Manual Institutional Sync via Supabase RPC
   const handleTriggerSync = async () => {
@@ -180,6 +293,82 @@ export default function EtlManagementPage() {
           <span className="text-sm font-semibold">{syncFeedback.message}</span>
         </div>
       )}
+
+      <section className="rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-5 space-y-4">
+        <div className="flex flex-wrap items-end justify-between gap-4">
+          <div>
+            <h2 className="text-lg font-bold text-slate-900 dark:text-white">Import roster from Excel</h2>
+            <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">Piliin ang category at Excel file para i-preview bago ang ETL import.</p>
+          </div>
+          <label className="text-sm font-semibold text-slate-700 dark:text-slate-300">
+            Category
+            <select
+              value={uploadCategory}
+              onChange={(event) => {
+                setUploadCategory(event.target.value);
+                setUploadFile(null);
+                setUploadRows([]);
+                setUploadError('');
+              }}
+              className="mt-1 block w-full min-w-40 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-950 px-3 py-2"
+            >
+              <option value="students">Students</option>
+              <option value="staff">Staff</option>
+            </select>
+          </label>
+        </div>
+
+        <label className="flex min-h-28 cursor-pointer flex-col items-center justify-center gap-2 rounded-lg border-2 border-dashed border-slate-300 dark:border-slate-700 bg-slate-50 dark:bg-slate-950/50 px-4 py-5 text-center hover:border-blue-700 dark:hover:border-blue-400">
+          <UploadCloud className="h-6 w-6 text-blue-800 dark:text-blue-300" />
+          <span className="text-sm font-semibold text-slate-800 dark:text-slate-100">
+            {isReadingFile ? 'Reading Excel file...' : uploadFile?.name || 'Choose .xlsx or .xls file'}
+          </span>
+          <span className="text-xs text-slate-500">Max 10 MB; first worksheet will be used</span>
+          <input key={uploadCategory} type="file" accept=".xlsx,.xls" onChange={handleExcelFile} className="sr-only" />
+        </label>
+
+        <div className="text-xs text-slate-500 dark:text-slate-400">
+          Required columns: {requiredFields[uploadCategory].join(', ')}
+        </div>
+
+        {uploadError && <p role="alert" className="text-sm font-medium text-rose-700 dark:text-rose-300">{uploadError}</p>}
+
+        {uploadRows.length > 0 && (
+          <div className="space-y-3">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <p className="text-sm font-semibold text-slate-800 dark:text-slate-100">
+                {uploadFile?.name} · {uploadRows.length} rows ready
+              </p>
+              <button
+                type="button"
+                onClick={handleImportExcel}
+                disabled={isImportingFile || isReadingFile}
+                className="inline-flex items-center gap-2 rounded-lg bg-[#0f2444] px-4 py-2 text-sm font-bold text-white transition hover:bg-[#1a365d] disabled:opacity-50"
+              >
+                <UploadCloud className="h-4 w-4" />
+                {isImportingFile ? 'Importing...' : 'Import to ETL'}
+              </button>
+            </div>
+            <div className="overflow-x-auto rounded-lg border border-slate-200 dark:border-slate-800">
+              <table className="w-full text-left text-xs">
+                <thead className="bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-200">
+                  <tr>
+                    {Object.keys(uploadRows[0]).map((field) => <th key={field} className="px-3 py-2 font-bold">{field}</th>)}
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-200 dark:divide-slate-800">
+                  {uploadRows.slice(0, 5).map((row, index) => (
+                    <tr key={index}>
+                      {Object.keys(uploadRows[0]).map((field) => <td key={field} className="max-w-56 truncate px-3 py-2 text-slate-700 dark:text-slate-300">{row[field] || '—'}</td>)}
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            {uploadRows.length > 5 && <p className="text-xs text-slate-500">Previewing first 5 of {uploadRows.length} rows.</p>}
+          </div>
+        )}
+      </section>
 
       {/* Stats Summary Cards */}
       <div className="grid grid-cols-1 sm:grid-cols-4 gap-4">
