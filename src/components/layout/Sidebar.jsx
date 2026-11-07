@@ -16,7 +16,7 @@ import {
 } from 'lucide-react';
 
 export default function Sidebar({ activeTab, setActiveTab }) {
-  const { currentUser, logout, switchRole, isOSD, isMinistro } = useAuth();
+  const { currentUser, logout, isOSD, isMinistro, isPrincipal, isAdviser, isBoard, isPresident } = useAuth();
   const { appeals, communityServices, incidents } = useIncidents();
 
   // Badge counts
@@ -32,6 +32,7 @@ export default function Sidebar({ activeTab, setActiveTab }) {
 
   // The 8 navigation items requested:
   // Dashboard, Reports, Students, Appeals, Community Service, Expelled, Audit Log, Settings
+  // Note: Board of Discipline has restricted administrative scope (no settings management)
   const navItems = [
     {
       id: 'dashboard',
@@ -74,11 +75,15 @@ export default function Sidebar({ activeTab, setActiveTab }) {
       label: 'Audit Log',
       icon: Shield,
     },
-    {
-      id: 'settings',
-      label: 'Settings',
-      icon: Settings,
-    },
+    ...(!isBoard
+      ? [
+          {
+            id: 'settings',
+            label: 'Settings',
+            icon: Settings,
+          },
+        ]
+      : []),
   ];
 
   return (
@@ -141,58 +146,43 @@ export default function Sidebar({ activeTab, setActiveTab }) {
         })}
       </nav>
 
-      {/* Switcher & Sign Out */}
+      {/* User Profile & Sign Out (No Role Switcher) */}
       <div className="p-4 border-t border-[#1b365d] bg-[#0a1a33] space-y-3">
-        {/* Administrator Role Switcher */}
-        <div>
-          <label className="text-xs font-bold uppercase tracking-wider text-slate-300 block mb-2">
-            Switch Admin Role (Testing):
-          </label>
-          <div className="grid grid-cols-2 gap-1.5 bg-[#0f2444] p-1.5 rounded-xl border border-[#1b365d] text-xs font-semibold text-center">
-            <button
-              type="button"
-              onClick={() => switchRole('osd')}
-              className={`py-2 px-1 rounded-lg transition ${
-                isOSD
-                  ? 'bg-blue-700 text-white font-bold shadow-xs'
-                  : 'text-slate-300 hover:text-white'
-              }`}
-            >
-              OSD Admin
-            </button>
-            <button
-              type="button"
-              onClick={() => switchRole('ministrong_tagasubaybay')}
-              className={`py-2 px-1 rounded-lg transition ${
-                isMinistro
-                  ? 'bg-blue-700 text-white font-bold shadow-xs'
-                  : 'text-slate-300 hover:text-white'
-              }`}
-            >
-              Ministro
-            </button>
-          </div>
-        </div>
-
-        {/* Current Active User Profile */}
-        <div className="flex items-center justify-between pt-1">
+        <div className="flex items-center justify-between">
           <div className="flex items-center gap-2.5 min-w-0">
             <img
               src={currentUser?.avatar}
               alt={currentUser?.name}
-              className="w-9 h-9 rounded-full object-cover border border-slate-500 shrink-0"
+              className="w-10 h-10 rounded-full object-cover border-2 border-slate-500 shrink-0"
             />
             <div className="min-w-0">
               <p className="text-sm font-bold text-white truncate">{currentUser?.name}</p>
               <p className="text-xs text-blue-300 truncate font-semibold">
-                {currentUser?.role === 'osd' ? 'OSD Head' : 'Ministro ng Tagasubaybay'}
+                {isAdviser
+                  ? 'Section Adviser'
+                  : isPrincipal
+                  ? 'School Principal'
+                  : isOSD
+                  ? 'OSD Discipline Officer'
+                  : isMinistro
+                  ? 'Ministrong Tagasubaybay'
+                  : isBoard
+                  ? 'Board of Discipline'
+                  : isPresident
+                  ? 'School President'
+                  : currentUser?.title || 'Staff Official'}
               </p>
+              {currentUser?.assigned_section && (
+                <span className="inline-block mt-0.5 px-2 py-0.5 rounded text-[10px] font-bold bg-blue-900/80 text-blue-200 border border-blue-700/60 truncate max-w-[140px]">
+                  {currentUser.assigned_section}
+                </span>
+              )}
             </div>
           </div>
           <button
             type="button"
             onClick={logout}
-            className="p-2 text-slate-300 hover:text-rose-300 hover:bg-[#1b365d] rounded-lg transition"
+            className="p-2 text-slate-300 hover:text-rose-300 hover:bg-[#1b365d] rounded-lg transition shrink-0"
             title="Sign Out"
             aria-label="Sign Out"
           >

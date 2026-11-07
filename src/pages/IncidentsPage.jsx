@@ -35,7 +35,7 @@ export default function IncidentsPage({
   const [sortField, setSortField] = useState('created_at');
   const [sortOrder, setSortOrder] = useState('desc');
   const [currentPage, setCurrentPage] = useState(1);
-  const itemsPerPage = 7;
+  const itemsPerPage = 10;
 
   // Filter list
   const filteredIncidents = useMemo(() => {
@@ -49,7 +49,23 @@ export default function IncidentsPage({
         if (!matchesName && !matchesCase && !matchesTitle && !matchesLRN) return false;
       }
 
-      if (statusFilter !== 'ALL' && inc.status !== statusFilter) return false;
+      if (statusFilter !== 'ALL') {
+        if (statusFilter === 'Forwarded for Initial Intervention') {
+          const isStage2 =
+            inc.status === 'Forwarded for Initial Intervention' ||
+            inc.stageNumber === 2 ||
+            (inc.status || '').toLowerCase().includes('initial intervention');
+          if (!isStage2) return false;
+        } else if (statusFilter === 'Escalated to OSD and Principal') {
+          const isStage3 =
+            inc.status === 'Escalated to OSD and Principal' ||
+            inc.stageNumber === 3 ||
+            (inc.status || '').toLowerCase().includes('osd and principal');
+          if (!isStage3) return false;
+        } else if (inc.status !== statusFilter) {
+          return false;
+        }
+      }
       if (categoryFilter !== 'ALL' && inc.category !== categoryFilter) return false;
       if (severityFilter !== 'ALL' && inc.severity !== severityFilter) return false;
 
@@ -92,6 +108,8 @@ export default function IncidentsPage({
 
   const statusChips = [
     { label: 'All Records', value: 'ALL' },
+    { label: 'Stage 2: Joint Intervention', value: 'Forwarded for Initial Intervention' },
+    { label: 'Stage 3: OSD & Principal', value: 'Escalated to OSD and Principal' },
     { label: 'Recent Reports', value: 'Recent Report' },
     { label: 'Ongoing Reports', value: 'Ongoing Report' },
     { label: 'Appealed Cases', value: 'Appealed' },

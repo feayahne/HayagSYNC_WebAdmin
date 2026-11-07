@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import Modal from '../common/Modal';
 import StatusBadge from '../common/StatusBadge';
 import SeverityBadge from '../common/SeverityBadge';
@@ -15,7 +15,15 @@ import {
   CheckCircle2,
   ExternalLink,
   Printer,
-  Scale
+  Scale,
+  Send,
+  Gavel,
+  EyeOff,
+  ArrowRight,
+  Award,
+  Sparkles,
+  Building2,
+  X
 } from 'lucide-react';
 
 export default function IncidentDetailModal({
@@ -26,8 +34,48 @@ export default function IncidentDetailModal({
   onViewStudent,
   onGenerateSummons,
 }) {
-  const { isOSD, isAdmin, usersList } = useAuth();
-  const { assignHandler } = useIncidents();
+  const { currentUser, isOSD, isAdmin, isMinistro, isPrincipal, isJhsPrincipal, isShsPrincipal, isAdviser, isBoard, isPresident, usersList } = useAuth();
+  const {
+    assignHandler,
+    forwardForInitialIntervention,
+    resolveInitialIntervention,
+    escalateToOsdAndPrincipal,
+    resolveOsdAndPrincipal,
+    escalateToBoard,
+    finalizeBoardDecision,
+    completePresidentReview,
+    determineGradeAssignments,
+  } = useIncidents();
+
+  // 5-Stage Multi-Level Sub-modal dialog states
+  const [showStage1Dialog, setShowStage1Dialog] = useState(false);
+  const [stage1Notes, setStage1Notes] = useState('');
+
+  const [showStage2ResolveDialog, setShowStage2ResolveDialog] = useState(false);
+  const [stage2RestorativeAction, setStage2RestorativeAction] = useState('Counseling & Peer Mediation Completed');
+  const [stage2ResolveNotes, setStage2ResolveNotes] = useState('');
+
+  const [showStage2EscalateDialog, setShowStage2EscalateDialog] = useState(false);
+  const [stage2EscalateReason, setStage2EscalateReason] = useState('');
+  const [stage2EscalateNotes, setStage2EscalateNotes] = useState('');
+
+  const [showStage3ResolveDialog, setShowStage3ResolveDialog] = useState(false);
+  const [stage3DisciplineAction, setStage3DisciplineAction] = useState('Suspension (3 School Days) & Conduct Probation');
+  const [stage3ResolveNotes, setStage3ResolveNotes] = useState('');
+
+  const [showStage3EscalateBoardDialog, setShowStage3EscalateBoardDialog] = useState(false);
+  const [stage3BoardReason, setStage3BoardReason] = useState('');
+  const [stage3BoardNotes, setStage3BoardNotes] = useState('');
+
+  const [showStage4BoardDialog, setShowStage4BoardDialog] = useState(false);
+  const [stage4Findings, setStage4Findings] = useState('');
+  const [stage4Decision, setStage4Decision] = useState('Institutional Hearing Concluded - Sanction Imposed');
+  const [stage4Punishment, setStage4Punishment] = useState('Suspension (5 School Days) & Behavioral Contract');
+
+  const [showStage5PresidentDialog, setShowStage5PresidentDialog] = useState(false);
+  const [stage5Remarks, setStage5Remarks] = useState('');
+
+  const [showPresidentFinalModal, setShowPresidentFinalModal] = useState(false);
 
   if (!incident) return null;
 
@@ -38,6 +86,244 @@ export default function IncidentDetailModal({
       assignHandler(incident.id, user.id, user.name);
     }
   };
+
+  const handleExecuteEscalateToOSD = async (e) => {
+    e.preventDefault();
+    if (!escalateReason.trim()) {
+      setEscalateError('Please state the specific reason for escalating to OSD.');
+      return;
+    }
+    await escalateIncident(incident.id, 'OSD', escalateReason.trim(), escalateNotes.trim());
+    setShowEscalateDialog(false);
+    setEscalateReason('');
+    setEscalateNotes('');
+  };
+
+  const handleExecuteReferBoard = async (e) => {
+    e.preventDefault();
+    await referToBoard(incident.id, referBoardNotes.trim());
+    setShowReferBoardDialog(false);
+    setReferBoardNotes('');
+  };
+
+  // Handlers for the 5-Stage multi-level workflow
+  const handleStage1Forward = async (e) => {
+    if (e && e.preventDefault) e.preventDefault();
+    await forwardForInitialIntervention(incident.id, stage1Notes.trim());
+    incident.stageNumber = 2;
+    incident.status = 'Forwarded for Initial Intervention';
+    setShowStage1Dialog(false);
+    setStage1Notes('');
+  };
+
+  const handleStage2Resolve = async (e) => {
+    if (e && e.preventDefault) e.preventDefault();
+    await resolveInitialIntervention(incident.id, stage2RestorativeAction, stage2ResolveNotes.trim());
+    incident.status = 'Resolved';
+    setShowStage2ResolveDialog(false);
+    setStage2ResolveNotes('');
+  };
+
+  const handleStage2Escalate = async (e) => {
+    if (e && e.preventDefault) e.preventDefault();
+    if (!stage2EscalateReason.trim()) return;
+    await escalateToOsdAndPrincipal(incident.id, stage2EscalateReason.trim(), stage2EscalateNotes.trim());
+    incident.stageNumber = 3;
+    incident.status = 'Escalated to OSD and Principal';
+    setShowStage2EscalateDialog(false);
+    setStage2EscalateReason('');
+    setStage2EscalateNotes('');
+  };
+
+  const handleStage3Resolve = async (e) => {
+    if (e && e.preventDefault) e.preventDefault();
+    await resolveOsdAndPrincipal(incident.id, stage3DisciplineAction, stage3ResolveNotes.trim());
+    incident.status = 'Resolved';
+    setShowStage3ResolveDialog(false);
+    setStage3ResolveNotes('');
+  };
+
+  const handleStage3EscalateBoard = async (e) => {
+    if (e && e.preventDefault) e.preventDefault();
+    if (!stage3BoardReason.trim()) return;
+    await escalateToBoard(incident.id, stage3BoardReason.trim(), stage3BoardNotes.trim());
+    incident.stageNumber = 4;
+    incident.status = 'Escalated to Board of Discipline';
+    setShowStage3EscalateBoardDialog(false);
+    setStage3BoardReason('');
+    setStage3BoardNotes('');
+  };
+
+  const handleStage4BoardSubmit = async (e) => {
+    if (e && e.preventDefault) e.preventDefault();
+    await finalizeBoardDecision(incident.id, stage4Findings.trim() || 'Formal board hearing completed.', stage4Decision, stage4Punishment);
+    incident.stageNumber = 5;
+    incident.status = 'Forwarded to School President';
+    setShowStage4BoardDialog(false);
+  };
+
+  const handleStage5PresidentSubmit = async (e) => {
+    if (e && e.preventDefault) e.preventDefault();
+    const remarks = stage5Remarks.trim() || 'Executive affirmation completed and ratified.';
+    await completePresidentReview(incident.id, remarks);
+    incident.status = 'Resolved';
+    incident.president_finalized = true;
+    incident.president_reviewed = true;
+    incident.president_notes = remarks;
+    incident.discipline_notes = `President Final Affirmation: ${remarks}`;
+    setShowStage5PresidentDialog(false);
+    setShowPresidentFinalModal(true);
+  };
+
+  const currentStage = incident.stageNumber || 1;
+  const isResolved = (incident.status || '').toLowerCase() === 'resolved';
+
+  const isPresidentFinalized = Boolean(
+    incident.president_finalized ||
+    incident.president_reviewed ||
+    (incident.discipline_notes && incident.discipline_notes.toLowerCase().includes('president')) ||
+    incident.president_notes
+  );
+
+  const presidentNotesClean = incident.president_notes || (
+    incident.discipline_notes && incident.discipline_notes.includes('President Final Affirmation:')
+      ? incident.discipline_notes.split('President Final Affirmation:')[1]?.trim()
+      : (incident.discipline_notes || 'Executive affirmation completed and ratified.')
+  );
+
+  const presidentSanction = (
+    incident.punishment_imposed ||
+    incident.discipline_action ||
+    incident.board_decision ||
+    'Institutional Suspension & Behavioral Contract'
+  );
+
+  // Section and grade matching for role-based action controls
+  const userSection = (currentUser?.assigned_section || '').toLowerCase();
+  const incSection = (incident.student_section || incident.section || '').toLowerCase();
+  const incGrade = (incident.student_grade || incident.grade || '').toLowerCase();
+  const bullySec = (incident.bully_grade_section || '').toLowerCase();
+
+  // Section Adviser check: adviser can act on cases involving their section
+  const isAdviserOfThisCase = isAdviser && userSection && (
+    incSection.includes(userSection) || userSection.includes(incSection) || bullySec.includes(userSection)
+  );
+
+  // Principal jurisdiction check: JHS covers Grades 7-10, SHS covers Grades 11-12
+  const isJhsCase = /grade\s*(7|8|9|10)\b/i.test(incGrade) || /grade\s*(7|8|9|10)\b/i.test(incSection);
+  const isShsCase = /grade\s*(11|12)\b/i.test(incGrade) || /grade\s*(11|12)\b/i.test(incSection);
+  const isPrincipalWithJurisdiction = isPrincipal && (
+    (isJhsPrincipal && (isJhsCase || !isShsCase)) ||
+    (isShsPrincipal && isShsCase)
+  );
+
+  const assignments = determineGradeAssignments
+    ? determineGradeAssignments(
+        incident.student_grade || incident.grade,
+        incident.student_section || incident.section,
+        incident.bully_grade_section
+      )
+    : {
+        grades: ['Grade 7'],
+        ministroName: 'Gng. Corazon Alcantara',
+        osdName: 'G. Renato Dalisay',
+        principalName: 'Dr. Alicia Magalong - JHS Principal',
+      };
+
+  const render5StageStepper = () => {
+    const stages = [
+      { num: 1, title: 'OSD Assessment', desc: 'Stage 1' },
+      { num: 2, title: 'Ministro & Adviser', desc: 'Stage 2' },
+      { num: 3, title: 'OSD & Principal', desc: 'Stage 3' },
+      { num: 4, title: 'Board of Discipline', desc: 'Stage 4' },
+      { num: 5, title: 'School President', desc: 'Stage 5' },
+    ];
+
+    return (
+      <div className="p-4 bg-slate-50 dark:bg-slate-800/60 rounded-xl border border-slate-200 dark:border-slate-700">
+        <div className="flex items-center justify-between mb-2">
+          <span className="text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">
+            5-Stage Disciplinary Escalation & Resolution Workflow
+          </span>
+          <span className="text-xs font-bold text-blue-900 dark:text-blue-400">
+            {isResolved ? 'Case Resolved' : 'Current: Stage ' + currentStage + ' (' + (incident.currentHandlingOffice || 'Handling') + ')'}
+          </span>
+        </div>
+        <div className="grid grid-cols-5 gap-2 pt-1">
+          {stages.map((st) => {
+            const isCompleted = isResolved || currentStage > st.num;
+            const isCurrent = !isResolved && currentStage === st.num;
+            return (
+              <div
+                key={st.num}
+                className={'p-2.5 rounded-lg border text-center transition ' + (
+                  isCompleted
+                    ? 'bg-emerald-50 dark:bg-emerald-950/40 border-emerald-300 dark:border-emerald-800 text-emerald-900 dark:text-emerald-200'
+                    : isCurrent
+                    ? 'bg-blue-100 dark:bg-blue-950 border-blue-400 dark:border-blue-700 text-blue-950 dark:text-blue-100 ring-2 ring-blue-500/30'
+                    : 'bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800 text-slate-400'
+                )}
+              >
+                <div className="flex items-center justify-center gap-1 mb-1">
+                  {isCompleted ? (
+                    <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
+                  ) : (
+                    <span className={'w-4 h-4 rounded-full text-[10px] font-bold flex items-center justify-center ' + (
+                      isCurrent ? 'bg-blue-600 text-white' : 'bg-slate-200 text-slate-600 dark:bg-slate-800 dark:text-slate-400'
+                    )}>
+                      {st.num}
+                    </span>
+                  )}
+                </div>
+                <div className="text-[11px] font-bold truncate leading-tight">{st.title}</div>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+    );
+  };
+
+  const renderGradeAssignmentsCard = () => (
+    <div className="p-4 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 space-y-2">
+      <div className="flex items-center justify-between">
+        <span className="text-xs font-bold uppercase tracking-wider text-slate-600 dark:text-slate-300">
+          Assigned Grade-Level Disciplinary Personnel
+        </span>
+        <span className="text-[11px] font-semibold text-slate-500">
+          Coverage: {assignments.grades.join(', ')}
+        </span>
+      </div>
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5 text-xs">
+        <div className="p-2.5 bg-white dark:bg-slate-900 rounded-lg border border-slate-200 dark:border-slate-800">
+          <span className="text-slate-400 block font-semibold text-[10px] uppercase">Ministrong Tagasubaybay</span>
+          <span className="font-bold text-slate-800 dark:text-slate-200">{assignments.ministroName}</span>
+        </div>
+        <div className="p-2.5 bg-white dark:bg-slate-900 rounded-lg border border-slate-200 dark:border-slate-800">
+          <span className="text-slate-400 block font-semibold text-[10px] uppercase">OSD Discipline Officer</span>
+          <span className="font-bold text-slate-800 dark:text-slate-200">{assignments.osdName}</span>
+        </div>
+        <div className="p-2.5 bg-white dark:bg-slate-900 rounded-lg border border-slate-200 dark:border-slate-800">
+          <span className="text-slate-400 block font-semibold text-[10px] uppercase">School Principal</span>
+          <span className="font-bold text-slate-800 dark:text-slate-200">{assignments.principalName}</span>
+        </div>
+      </div>
+    </div>
+  );
+
+  const renderAnonymousNotice = () => (
+    <div className="p-3.5 bg-slate-900 text-white rounded-xl border border-slate-800 flex items-start gap-3">
+      <EyeOff className="w-5 h-5 text-amber-400 shrink-0 mt-0.5" />
+      <div className="text-xs space-y-0.5">
+        <span className="font-bold text-amber-300 uppercase tracking-wide block">
+          Confidential Anonymous Report — Protected Minor Record (RA 10173)
+        </span>
+        <span className="text-slate-300">
+          This incident was submitted without account login. In accordance with DepEd Child Protection Policy, no personal metadata, IP address, or parent account is linked to this case.
+        </span>
+      </div>
+    </div>
+  );
 
   return (
     <Modal isOpen={isOpen} onClose={onClose} title={`Official Case Record: ${incident.case_number}`} maxWidth="max-w-4xl">
@@ -55,25 +341,819 @@ export default function IncidentDetailModal({
             <h2 className="text-xl font-bold text-slate-900 dark:text-white mt-2">{incident.title}</h2>
           </div>
 
-          {/* Quick Action Buttons */}
-          <div className="flex flex-wrap items-center gap-3">
-            {isAdmin && (
+          {/* 5-Stage Action Controls */}
+          <div className="flex flex-wrap items-center gap-2.5">
+            {!isResolved ? (
+              <>
+                {/* STAGE 1: OSD Initial Assessment */}
+                {currentStage === 1 && (
+                  isOSD ? (
+                    <button
+                      onClick={() => setShowStage1Dialog(true)}
+                      className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-sm font-bold shadow-xs transition flex items-center gap-1.5 cursor-pointer"
+                    >
+                      <Send className="w-4 h-4" /> Forward for Initial Intervention
+                    </button>
+                  ) : (
+                    <span className="text-xs font-bold text-blue-700 dark:text-blue-300 bg-blue-50 dark:bg-blue-950/60 px-3 py-1.5 rounded-lg border border-blue-200 dark:border-blue-800">
+                      Stage 1: Awaiting OSD Initial Assessment & Referral
+                    </span>
+                  )
+                )}
+
+                {/* STAGE 2: Ministrong Tagasubaybay & Section Adviser Joint Intervention */}
+                {currentStage === 2 && (
+                  (isMinistro || isAdviser) ? (
+                    <>
+                      <button
+                        onClick={() => setShowStage2ResolveDialog(true)}
+                        className="px-3.5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-sm font-bold shadow-xs transition flex items-center gap-1.5 cursor-pointer"
+                      >
+                        <CheckCircle2 className="w-4 h-4" /> Resolve Case (Intervention Successful)
+                      </button>
+                      <button
+                        onClick={() => setShowStage2EscalateDialog(true)}
+                        className="px-3.5 py-2 bg-amber-600 hover:bg-amber-700 text-white rounded-lg text-sm font-bold shadow-xs transition flex items-center gap-1.5 cursor-pointer"
+                      >
+                        <Send className="w-4 h-4" /> Escalate to OSD & Principal
+                      </button>
+                    </>
+                  ) : (
+                    <span className="text-xs font-bold text-teal-700 dark:text-teal-300 bg-teal-50 dark:bg-teal-950/60 px-3 py-1.5 rounded-lg border border-teal-200 dark:border-teal-800">
+                      Stage 2: Actively handled by Ministrong Tagasubaybay & Section Adviser
+                    </span>
+                  )
+                )}
+
+                {/* STAGE 3: OSD & Principal Joint Intervention */}
+                {currentStage === 3 && (
+                  (isOSD || isPrincipalWithJurisdiction) ? (
+                    <>
+                      <button
+                        onClick={() => setShowStage3ResolveDialog(true)}
+                        className="px-3.5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-sm font-bold shadow-xs transition flex items-center gap-1.5 cursor-pointer"
+                      >
+                        <CheckCircle2 className="w-4 h-4" /> Resolve & Impose Disciplinary Sanction
+                      </button>
+                      <button
+                        onClick={() => setShowStage3EscalateBoardDialog(true)}
+                        className="px-3.5 py-2 bg-purple-700 hover:bg-purple-800 text-white rounded-lg text-sm font-bold shadow-xs transition flex items-center gap-1.5 cursor-pointer"
+                      >
+                        <Scale className="w-4 h-4" /> Escalate to Board of Discipline
+                      </button>
+                    </>
+                  ) : isPrincipal ? (
+                    <span className="text-xs font-bold text-amber-700 dark:text-amber-300 bg-amber-50 dark:bg-amber-950/60 px-3 py-1.5 rounded-lg border border-amber-200 dark:border-amber-800">
+                      Stage 3: Under Jurisdiction of {isJhsPrincipal ? 'Senior High Principal (Grades 11–12)' : 'Junior High Principal (Grades 7–10)'} & OSD (View Only)
+                    </span>
+                  ) : (
+                    <span className="text-xs font-bold text-amber-700 dark:text-amber-300 bg-amber-50 dark:bg-amber-950/60 px-3 py-1.5 rounded-lg border border-amber-200 dark:border-amber-800">
+                      Stage 3: Actively handled by OSD & School Principal
+                    </span>
+                  )
+                )}
+
+                {/* STAGE 4: Board of Discipline Deliberation */}
+                {currentStage === 4 && (
+                  isBoard ? (
+                    <button
+                      onClick={() => setShowStage4BoardDialog(true)}
+                      className="px-4 py-2 bg-purple-700 hover:bg-purple-800 text-white rounded-lg text-sm font-bold shadow-xs transition flex items-center gap-1.5 cursor-pointer"
+                    >
+                      <Gavel className="w-4 h-4" /> Finalize Board Decision & Punishment
+                    </button>
+                  ) : (
+                    <span className="text-xs font-bold text-purple-700 dark:text-purple-300 bg-purple-50 dark:bg-purple-950/60 px-3 py-1.5 rounded-lg border border-purple-200 dark:border-purple-800">
+                      Stage 4: Institutional deliberation by Board of Discipline
+                    </span>
+                  )
+                )}
+
+                {/* STAGE 5: School President Final Review */}
+                {currentStage === 5 && (
+                  isPresident ? (
+                    <button
+                      onClick={() => setShowStage5PresidentDialog(true)}
+                      className="px-4 py-2 bg-blue-900 hover:bg-blue-800 text-white rounded-lg text-sm font-bold shadow-xs transition flex items-center gap-1.5 cursor-pointer"
+                    >
+                      <CheckCircle2 className="w-4 h-4" /> Complete President Final Review
+                    </button>
+                  ) : (
+                    <span className="text-xs font-bold text-blue-800 dark:text-blue-300 bg-blue-50 dark:bg-blue-950/60 px-3 py-1.5 rounded-lg border border-blue-200 dark:border-blue-800">
+                      Stage 5: Board decision finalized. Awaiting School President executive review
+                    </span>
+                  )
+                )}
+              </>
+            ) : (
+              <span className="text-xs font-bold text-emerald-800 dark:text-emerald-200 bg-emerald-50 dark:bg-emerald-950/60 px-3 py-1.5 rounded-lg border border-emerald-300 dark:border-emerald-700 flex items-center gap-1.5">
+                <CheckCircle2 className="w-4 h-4 text-emerald-600" /> Proceedings Complete & Resolved
+              </span>
+            )}
+
+            {isPresidentFinalized && (
               <button
-                onClick={() => onChangeStatus(incident)}
-                className="px-4 py-2.5 bg-[#0f2444] hover:bg-[#1a365d] text-white rounded-lg text-sm md:text-base font-bold shadow-sm transition"
+                type="button"
+                onClick={() => setShowPresidentFinalModal(true)}
+                className="px-3.5 py-2 bg-gradient-to-r from-amber-600 to-amber-700 hover:from-amber-700 hover:to-amber-800 text-white rounded-lg text-sm font-bold shadow-md transition flex items-center gap-1.5 cursor-pointer"
+                title="View Official Presidential Decree Pop-up"
               >
-                Update Case Status / Sanction
+                <Award className="w-4 h-4 text-amber-200" /> President's Final Decision (Pop-up)
               </button>
             )}
+
             <button
               onClick={() => onGenerateSummons(incident)}
-              className="px-4 py-2.5 bg-slate-100 hover:bg-slate-200 dark:bg-slate-700 dark:hover:bg-slate-600 text-slate-800 dark:text-slate-100 rounded-lg text-sm md:text-base font-bold transition flex items-center gap-2 border border-slate-300 dark:border-slate-600"
+              className="px-3.5 py-2 bg-slate-100 hover:bg-slate-200 dark:bg-slate-700 dark:hover:bg-slate-600 text-slate-800 dark:text-slate-100 rounded-lg text-sm font-bold transition flex items-center gap-1.5 border border-slate-300 dark:border-slate-600 cursor-pointer"
               title="Print Guardian Summons Notice"
             >
               <Printer className="w-4 h-4" /> Print Summons Letter
             </button>
           </div>
         </div>
+
+        {/* OFFICE OF THE SCHOOL PRESIDENT - FINAL EXECUTIVE DECISION BANNER */}
+        {isPresidentFinalized && (
+          <div className="p-5 rounded-xl bg-gradient-to-r from-slate-900 via-blue-950 to-slate-900 text-white border-2 border-amber-400/80 shadow-lg relative overflow-hidden">
+            <div className="relative z-10 flex flex-col md:flex-row md:items-center justify-between gap-4">
+              <div className="space-y-1.5 flex-1">
+                <div className="flex items-center gap-2">
+                  <span className="p-1.5 rounded-lg bg-amber-500/20 text-amber-300 border border-amber-400/40">
+                    <Award className="w-5 h-5 text-amber-400" />
+                  </span>
+                  <div>
+                    <span className="text-[11px] font-bold uppercase tracking-widest text-amber-400 block font-mono">
+                      Republic of the Philippines • Office of the School President
+                    </span>
+                    <h3 className="text-lg font-extrabold text-white tracking-wide">
+                      Official Executive Decision & Disciplinary Directive
+                    </h3>
+                  </div>
+                </div>
+
+                <div className="mt-2 p-3 bg-white/10 rounded-lg border border-white/15 backdrop-blur-xs">
+                  <div className="text-xs text-amber-200 font-semibold uppercase tracking-wider mb-0.5">
+                    Presidential Final Affirmation / Directive:
+                  </div>
+                  <p className="text-sm font-medium text-slate-100 italic">
+                    "{presidentNotesClean}"
+                  </p>
+                </div>
+
+                <div className="flex flex-wrap items-center gap-4 text-xs text-slate-300 pt-1">
+                  <div>
+                    <span className="text-slate-400">Sanction Enforced: </span>
+                    <strong className="text-amber-300">{presidentSanction}</strong>
+                  </div>
+                  <div className="hidden sm:block text-slate-500">•</div>
+                  <div>
+                    <span className="text-slate-400">Reviewing Official: </span>
+                    <strong className="text-white">Dr. Vicente Agoncillo, School President</strong>
+                  </div>
+                </div>
+              </div>
+
+              <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 shrink-0">
+                <button
+                  type="button"
+                  onClick={() => setShowPresidentFinalModal(true)}
+                  className="px-4 py-2.5 bg-amber-500 hover:bg-amber-600 text-slate-950 font-bold rounded-lg text-xs shadow-md transition flex items-center justify-center gap-2 cursor-pointer"
+                >
+                  <Award className="w-4 h-4 text-slate-950" /> View Presidential Decree (Pop-up)
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* 5-STAGE PROGRESS STEPPER */}
+        {render5StageStepper()}
+
+        {/* AUTOMATIC GRADE-LEVEL PERSONNEL ASSIGNMENTS */}
+        {renderGradeAssignmentsCard()}
+
+        {/* ANONYMOUS REPORT NOTICE (IDENTITY PROTECTED) */}
+        {incident.is_anonymous && renderAnonymousNotice()}
+
+        {/* Escalation Context Banner */}
+        {(incident.escalated_to || incident.escalation_reason || (incident.status || '').includes('Escalated')) && (
+          <div className="p-4 rounded-xl bg-amber-50 dark:bg-amber-950/40 border border-amber-300 dark:border-amber-850 space-y-1.5">
+            <div className="flex items-center gap-2 text-amber-900 dark:text-amber-200 text-sm font-bold">
+              <AlertTriangle className="w-4 h-4 text-amber-600" />
+              <span>Official Case Escalation Record ({incident.status || 'Escalated'})</span>
+            </div>
+            {incident.escalated_to && (
+              <p className="text-sm text-slate-700 dark:text-slate-300">
+                <strong className="text-slate-900 dark:text-white">Escalated to:</strong> {incident.escalated_to}
+              </p>
+            )}
+            {incident.escalation_reason && (
+              <p className="text-sm text-slate-700 dark:text-slate-300">
+                <strong className="text-slate-900 dark:text-white">Reason:</strong> {incident.escalation_reason}
+              </p>
+            )}
+            {incident.escalation_notes && (
+              <p className="text-sm text-slate-700 dark:text-slate-300">
+                <strong className="text-slate-900 dark:text-white">Supporting Notes:</strong> {incident.escalation_notes}
+              </p>
+            )}
+          </div>
+        )}
+
+        {/* Board of Discipline Deliberation Record */}
+        {(incident.board_referred || incident.board_decision || incident.hearing_notes) && (
+          <div className="p-4 rounded-xl bg-purple-50 dark:bg-purple-950/40 border border-purple-300 dark:border-purple-850 space-y-2">
+            <div className="flex items-center gap-2 text-purple-900 dark:text-purple-200 text-sm font-bold">
+              <Scale className="w-4 h-4 text-purple-600" />
+              <span>Board of Discipline Formal Hearing Record</span>
+            </div>
+            {incident.hearing_notes && (
+              <p className="text-sm text-slate-700 dark:text-slate-300">
+                <strong className="text-slate-900 dark:text-white">Hearing Notes:</strong> {incident.hearing_notes}
+              </p>
+            )}
+            {incident.board_recommendations && (
+              <p className="text-sm text-slate-700 dark:text-slate-300">
+                <strong className="text-slate-900 dark:text-white">Board Recommendations:</strong> {incident.board_recommendations}
+              </p>
+            )}
+            {incident.board_decision && (
+              <p className="text-sm text-slate-700 dark:text-slate-300">
+                <strong className="text-slate-900 dark:text-white">Official Decision / Sanction:</strong> {incident.board_decision}
+              </p>
+            )}
+          </div>
+        )}
+
+        {/* STAGE 1 DIALOG: Forward for Initial Intervention Modal */}
+        {showStage1Dialog && (
+          <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/60 backdrop-blur-xs p-4 animate-in fade-in duration-150">
+            <div className="bg-white dark:bg-slate-900 rounded-2xl max-w-lg w-full p-6 shadow-2xl border border-blue-200 dark:border-blue-800 space-y-4">
+              <div className="flex items-center justify-between pb-2 border-b border-slate-200 dark:border-slate-800">
+                <h4 className="text-base font-bold text-blue-900 dark:text-blue-200 uppercase tracking-wider flex items-center gap-2">
+                  <Send className="w-5 h-5 text-blue-600" /> Forward for Initial Intervention
+                </h4>
+                <button
+                  type="button"
+                  onClick={() => setShowStage1Dialog(false)}
+                  className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 text-sm font-bold"
+                >
+                  ✕
+                </button>
+              </div>
+              <p className="text-xs text-slate-600 dark:text-slate-300 leading-relaxed">
+                The case will be officially referred to both the assigned <strong>Ministrong Tagasubaybay</strong> and <strong>Section Adviser</strong> for collaborative investigation, student interviews, and conflict intervention.
+              </p>
+              <div>
+                <label className="text-xs font-bold text-slate-800 dark:text-slate-200 block mb-1">
+                  OSD Initial Assessment Notes (Optional)
+                </label>
+                <textarea
+                  rows={3}
+                  autoFocus
+                  value={stage1Notes}
+                  onChange={(e) => setStage1Notes(e.target.value)}
+                  placeholder="Initial assessment directives or counseling observations for the handlers..."
+                  className="w-full p-3 text-sm rounded-lg border border-slate-300 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white focus:ring-2 focus:ring-blue-500 outline-hidden"
+                />
+              </div>
+              <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-200 dark:border-slate-800">
+                <button
+                  type="button"
+                  onClick={() => setShowStage1Dialog(false)}
+                  className="px-4 py-2 text-xs font-semibold rounded-lg border border-slate-300 dark:border-slate-700 hover:bg-slate-100 text-slate-700 dark:text-slate-300 cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  onClick={handleStage1Forward}
+                  className="px-5 py-2 text-xs font-bold bg-blue-600 hover:bg-blue-700 text-white rounded-lg shadow-md cursor-pointer flex items-center gap-1.5"
+                >
+                  <Send className="w-4 h-4" /> Confirm & Forward to Handlers
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* STAGE 2 DIALOG: Resolve Case Initial Intervention Modal Popup */}
+        {showStage2ResolveDialog && (
+          <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/60 backdrop-blur-xs p-4 animate-in fade-in duration-150">
+            <div className="bg-white dark:bg-slate-900 rounded-2xl max-w-lg w-full p-6 shadow-2xl border border-emerald-300 dark:border-emerald-800 space-y-4">
+              <div className="flex items-center justify-between pb-2 border-b border-slate-200 dark:border-slate-800">
+                <h4 className="text-base font-bold text-emerald-900 dark:text-emerald-200 uppercase tracking-wider flex items-center gap-2">
+                  <CheckCircle2 className="w-5 h-5 text-emerald-600" /> Stage 2: Resolve Case (Intervention Successful)
+                </h4>
+                <button
+                  type="button"
+                  onClick={() => setShowStage2ResolveDialog(false)}
+                  className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 text-sm font-bold cursor-pointer"
+                >
+                  ✕
+                </button>
+              </div>
+              <p className="text-xs text-slate-600 dark:text-slate-300 leading-relaxed">
+                Record restorative counseling, mediation agreement, and parental coordination conducted by the <strong>Ministrong Tagasubaybay</strong> and <strong>Section Adviser</strong>.
+              </p>
+              <form onSubmit={handleStage2Resolve} className="space-y-3">
+                <div>
+                  <label className="text-xs font-bold text-slate-800 dark:text-slate-200 block mb-1">
+                    Restorative Action / Agreement *
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    autoFocus
+                    value={stage2RestorativeAction}
+                    onChange={(e) => setStage2RestorativeAction(e.target.value)}
+                    placeholder="e.g. Peer mediation conducted, written apology, counseling agreement..."
+                    className="w-full p-2.5 text-sm rounded-lg border border-slate-300 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white focus:ring-2 focus:ring-emerald-500 outline-hidden"
+                  />
+                </div>
+                <div>
+                  <label className="text-xs font-bold text-slate-800 dark:text-slate-200 block mb-1">
+                    Intervention Notes & Details
+                  </label>
+                  <textarea
+                    rows={3}
+                    value={stage2ResolveNotes}
+                    onChange={(e) => setStage2ResolveNotes(e.target.value)}
+                    placeholder="Notes on the counseling session, parent response, and mutual behavioral commitments..."
+                    className="w-full p-2.5 text-sm rounded-lg border border-slate-300 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white focus:ring-2 focus:ring-emerald-500 outline-hidden"
+                  />
+                </div>
+                <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-200 dark:border-slate-800">
+                  <button
+                    type="button"
+                    onClick={() => setShowStage2ResolveDialog(false)}
+                    className="px-4 py-2 text-xs font-semibold rounded-lg border border-slate-300 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-300 cursor-pointer"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="submit"
+                    className="px-5 py-2 text-xs font-bold bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg shadow-md cursor-pointer flex items-center gap-1.5"
+                  >
+                    <CheckCircle2 className="w-4 h-4" /> Confirm & Resolve Case
+                  </button>
+                </div>
+              </form>
+            </div>
+          </div>
+        )}
+
+        {/* STAGE 2 DIALOG: Escalate to OSD and Principal Modal Popup */}
+        {showStage2EscalateDialog && (
+          <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/60 backdrop-blur-xs p-4 animate-in fade-in duration-150">
+            <div className="bg-white dark:bg-slate-900 rounded-2xl max-w-lg w-full p-6 shadow-2xl border border-amber-300 dark:border-amber-800 space-y-4">
+              <div className="flex items-center justify-between pb-2 border-b border-slate-200 dark:border-slate-800">
+                <h4 className="text-base font-bold text-amber-900 dark:text-amber-200 uppercase tracking-wider flex items-center gap-2">
+                  <Send className="w-5 h-5 text-amber-600" /> Stage 2: Escalate to OSD & School Principal
+                </h4>
+                <button
+                  type="button"
+                  onClick={() => setShowStage2EscalateDialog(false)}
+                  className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 text-sm font-bold cursor-pointer"
+                >
+                  ✕
+                </button>
+              </div>
+              <p className="text-xs text-slate-600 dark:text-slate-300 leading-relaxed">
+                When initial advisory intervention cannot resolve the conflict or the infraction exceeds advisory resolution, forward the case to both <strong>OSD</strong> and the <strong>School Principal</strong> for administrative disciplinary handling (Stage 3).
+              </p>
+              <form onSubmit={handleStage2Escalate} className="space-y-3">
+                <div>
+                  <label className="text-xs font-bold text-slate-800 dark:text-slate-200 block mb-1">
+                    Reason for Escalation *
+                  </label>
+                  <textarea
+                    required
+                    autoFocus
+                    rows={2}
+                    value={stage2EscalateReason}
+                    onChange={(e) => setStage2EscalateReason(e.target.value)}
+                    placeholder="State why intervention failed or why formal disciplinary sanction is required..."
+                    className="w-full p-2.5 text-sm rounded-lg border border-slate-300 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white focus:ring-2 focus:ring-amber-500 outline-hidden"
+                  />
+                </div>
+                <div>
+                  <label className="text-xs font-bold text-slate-800 dark:text-slate-200 block mb-1">
+                    Supporting Investigation Notes (Optional)
+                  </label>
+                  <input
+                    type="text"
+                    value={stage2EscalateNotes}
+                    onChange={(e) => setStage2EscalateNotes(e.target.value)}
+                    placeholder="Interview findings, student behavior, uncooperative parent response..."
+                    className="w-full p-2.5 text-sm rounded-lg border border-slate-300 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white focus:ring-2 focus:ring-amber-500 outline-hidden"
+                  />
+                </div>
+                <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-200 dark:border-slate-800">
+                  <button
+                    type="button"
+                    onClick={() => setShowStage2EscalateDialog(false)}
+                    className="px-4 py-2 text-xs font-semibold rounded-lg border border-slate-300 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-300 cursor-pointer"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="submit"
+                    className="px-5 py-2 text-xs font-bold bg-amber-600 hover:bg-amber-700 text-white rounded-lg shadow-md cursor-pointer flex items-center gap-1.5"
+                  >
+                    <Send className="w-4 h-4" /> Confirm & Escalate to Stage 3
+                  </button>
+                </div>
+              </form>
+            </div>
+          </div>
+        )}
+
+        {/* STAGE 3 DIALOG: Resolve Case Disciplinary Sanction Modal Popup */}
+        {showStage3ResolveDialog && (
+          <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/60 backdrop-blur-xs p-4 animate-in fade-in duration-150">
+            <div className="bg-white dark:bg-slate-900 rounded-2xl max-w-lg w-full p-6 shadow-2xl border border-emerald-300 dark:border-emerald-800 space-y-4">
+              <div className="flex items-center justify-between pb-2 border-b border-slate-200 dark:border-slate-800">
+                <h4 className="text-base font-bold text-emerald-900 dark:text-emerald-200 uppercase tracking-wider flex items-center gap-2">
+                  <CheckCircle2 className="w-5 h-5 text-emerald-600" /> Stage 3: Resolve & Impose Disciplinary Sanction
+                </h4>
+                <button
+                  type="button"
+                  onClick={() => setShowStage3ResolveDialog(false)}
+                  className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 text-sm font-bold cursor-pointer"
+                >
+                  ✕
+                </button>
+              </div>
+              <p className="text-xs text-slate-600 dark:text-slate-300 leading-relaxed">
+                Record administrative disciplinary action and conduct sanctions under the joint authority of <strong>OSD</strong> and the <strong>School Principal</strong>.
+              </p>
+              <form onSubmit={handleStage3Resolve} className="space-y-3">
+                <div>
+                  <label className="text-xs font-bold text-slate-800 dark:text-slate-200 block mb-1">
+                    Disciplinary Sanction Imposed *
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    autoFocus
+                    value={stage3DisciplineAction}
+                    onChange={(e) => setStage3DisciplineAction(e.target.value)}
+                    placeholder="e.g. 3-day suspension, mandatory community service, conduct probation..."
+                    className="w-full p-2.5 text-sm rounded-lg border border-slate-300 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white focus:ring-2 focus:ring-emerald-500 outline-hidden"
+                  />
+                </div>
+                <div>
+                  <label className="text-xs font-bold text-slate-800 dark:text-slate-200 block mb-1">
+                    Sanction Notes & Guardian Commitment
+                  </label>
+                  <textarea
+                    rows={3}
+                    value={stage3ResolveNotes}
+                    onChange={(e) => setStage3ResolveNotes(e.target.value)}
+                    placeholder="Conference outcome, guardian agreement notes..."
+                    className="w-full p-2.5 text-sm rounded-lg border border-slate-300 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white focus:ring-2 focus:ring-emerald-500 outline-hidden"
+                  />
+                </div>
+                <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-200 dark:border-slate-800">
+                  <button
+                    type="button"
+                    onClick={() => setShowStage3ResolveDialog(false)}
+                    className="px-4 py-2 text-xs font-semibold rounded-lg border border-slate-300 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-300 cursor-pointer"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="submit"
+                    className="px-5 py-2 text-xs font-bold bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg shadow-md cursor-pointer flex items-center gap-1.5"
+                  >
+                    <CheckCircle2 className="w-4 h-4" /> Apply Sanction & Resolve
+                  </button>
+                </div>
+              </form>
+            </div>
+          </div>
+        )}
+
+        {/* STAGE 3 DIALOG: Escalate to Board of Discipline Modal Popup */}
+        {showStage3EscalateBoardDialog && (
+          <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/60 backdrop-blur-xs p-4 animate-in fade-in duration-150">
+            <div className="bg-white dark:bg-slate-900 rounded-2xl max-w-lg w-full p-6 shadow-2xl border border-purple-300 dark:border-purple-800 space-y-4">
+              <div className="flex items-center justify-between pb-2 border-b border-slate-200 dark:border-slate-800">
+                <h4 className="text-base font-bold text-purple-900 dark:text-purple-200 uppercase tracking-wider flex items-center gap-2">
+                  <Scale className="w-5 h-5 text-purple-600" /> Stage 3: Refer to Board of Discipline
+                </h4>
+                <button
+                  type="button"
+                  onClick={() => setShowStage3EscalateBoardDialog(false)}
+                  className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 text-sm font-bold cursor-pointer"
+                >
+                  ✕
+                </button>
+              </div>
+              <p className="text-xs text-slate-600 dark:text-slate-300 leading-relaxed">
+                When OSD & Principal determine the case involves severe misconduct, major violence, or repeated violations requiring institutional Board hearing, escalate to the <strong>Board of Discipline</strong> (Stage 4).
+              </p>
+              <form onSubmit={handleStage3EscalateBoard} className="space-y-3">
+                <div>
+                  <label className="text-xs font-bold text-slate-800 dark:text-slate-200 block mb-1">
+                    Reason for Board Referral *
+                  </label>
+                  <textarea
+                    required
+                    autoFocus
+                    rows={2}
+                    value={stage3BoardReason}
+                    onChange={(e) => setStage3BoardReason(e.target.value)}
+                    placeholder="State why institutional Board of Discipline hearing and sanction is warranted..."
+                    className="w-full p-2.5 text-sm rounded-lg border border-slate-300 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white focus:ring-2 focus:ring-purple-500 outline-hidden"
+                  />
+                </div>
+                <div>
+                  <label className="text-xs font-bold text-slate-800 dark:text-slate-200 block mb-1">
+                    Supporting Dossier Summary (Optional)
+                  </label>
+                  <input
+                    type="text"
+                    value={stage3BoardNotes}
+                    onChange={(e) => setStage3BoardNotes(e.target.value)}
+                    placeholder="Previous infraction records, witness statements summary..."
+                    className="w-full p-2.5 text-sm rounded-lg border border-slate-300 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white focus:ring-2 focus:ring-purple-500 outline-hidden"
+                  />
+                </div>
+                <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-200 dark:border-slate-800">
+                  <button
+                    type="button"
+                    onClick={() => setShowStage3EscalateBoardDialog(false)}
+                    className="px-4 py-2 text-xs font-semibold rounded-lg border border-slate-300 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-300 cursor-pointer"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="submit"
+                    className="px-5 py-2 text-xs font-bold bg-purple-700 hover:bg-purple-800 text-white rounded-lg shadow-md cursor-pointer flex items-center gap-1.5"
+                  >
+                    <Scale className="w-4 h-4" /> Confirm & Escalate to Board (Stage 4)
+                  </button>
+                </div>
+              </form>
+            </div>
+          </div>
+        )}
+
+        {/* STAGE 4 DIALOG: Finalize Board Decision & Punishment Modal Popup */}
+        {showStage4BoardDialog && (
+          <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/60 backdrop-blur-xs p-4 animate-in fade-in duration-150">
+            <div className="bg-white dark:bg-slate-900 rounded-2xl max-w-lg w-full p-6 shadow-2xl border border-purple-300 dark:border-purple-800 space-y-4">
+              <div className="flex items-center justify-between pb-2 border-b border-slate-200 dark:border-slate-800">
+                <h4 className="text-base font-bold text-purple-900 dark:text-purple-200 uppercase tracking-wider flex items-center gap-2">
+                  <Gavel className="w-5 h-5 text-purple-600" /> Stage 4: Finalize Board Decision & Punishment
+                </h4>
+                <button
+                  type="button"
+                  onClick={() => setShowStage4BoardDialog(false)}
+                  className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 text-sm font-bold cursor-pointer"
+                >
+                  ✕
+                </button>
+              </div>
+              <p className="text-xs text-slate-600 dark:text-slate-300 leading-relaxed">
+                Record formal hearing findings and determine institutional punishment. This will forward the case directly to the <strong>School President</strong> for executive review and final decree (Stage 5).
+              </p>
+              <form onSubmit={handleStage4BoardSubmit} className="space-y-3">
+                <div>
+                  <label className="text-xs font-bold text-slate-800 dark:text-slate-200 block mb-1">
+                    Formal Board Findings & Hearing Summary *
+                  </label>
+                  <textarea
+                    required
+                    autoFocus
+                    rows={2}
+                    value={stage4Findings}
+                    onChange={(e) => setStage4Findings(e.target.value)}
+                    placeholder="Summary of testimonies, established facts, and mitigating/aggravating circumstances..."
+                    className="w-full p-2.5 text-sm rounded-lg border border-slate-300 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white focus:ring-2 focus:ring-purple-500 outline-hidden"
+                  />
+                </div>
+                <div>
+                  <label className="text-xs font-bold text-slate-800 dark:text-slate-200 block mb-1">
+                    Board Deliberation Decision *
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    value={stage4Decision}
+                    onChange={(e) => setStage4Decision(e.target.value)}
+                    placeholder="e.g. Respondent found liable for gross bullying under Section 6..."
+                    className="w-full p-2.5 text-sm rounded-lg border border-slate-300 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white focus:ring-2 focus:ring-purple-500 outline-hidden"
+                  />
+                </div>
+                <div>
+                  <label className="text-xs font-bold text-slate-800 dark:text-slate-200 block mb-1">
+                    Punishment Imposed *
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    value={stage4Punishment}
+                    onChange={(e) => setStage4Punishment(e.target.value)}
+                    placeholder="e.g. 5-day suspension, non-readmission recommendation, conduct probation..."
+                    className="w-full p-2.5 text-sm rounded-lg border border-slate-300 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white focus:ring-2 focus:ring-purple-500 outline-hidden"
+                  />
+                </div>
+                <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-200 dark:border-slate-800">
+                  <button
+                    type="button"
+                    onClick={() => setShowStage4BoardDialog(false)}
+                    className="px-4 py-2 text-xs font-semibold rounded-lg border border-slate-300 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-300 cursor-pointer"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="submit"
+                    className="px-5 py-2 text-xs font-bold bg-purple-700 hover:bg-purple-800 text-white rounded-lg shadow-md cursor-pointer flex items-center gap-1.5"
+                  >
+                    <Gavel className="w-4 h-4" /> Finalize & Forward to School President
+                  </button>
+                </div>
+              </form>
+            </div>
+          </div>
+        )}
+
+        {/* STAGE 5 DIALOG: Complete School President Final Review Modal Popup */}
+        {showStage5PresidentDialog && (
+          <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/60 backdrop-blur-xs p-4 animate-in fade-in duration-150">
+            <div className="bg-white dark:bg-slate-900 rounded-2xl max-w-lg w-full p-6 shadow-2xl border border-blue-300 dark:border-blue-800 space-y-4">
+              <div className="flex items-center justify-between pb-2 border-b border-slate-200 dark:border-slate-800">
+                <h4 className="text-base font-bold text-blue-950 dark:text-blue-100 uppercase tracking-wider flex items-center gap-2">
+                  <Award className="w-5 h-5 text-amber-500" /> Stage 5: School President Executive Affirmation
+                </h4>
+                <button
+                  type="button"
+                  onClick={() => setShowStage5PresidentDialog(false)}
+                  className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 text-sm font-bold cursor-pointer"
+                >
+                  ✕
+                </button>
+              </div>
+              <p className="text-xs text-slate-600 dark:text-slate-300 leading-relaxed">
+                Executive final affirmation of the Board of Discipline findings and punishment. Completing this concludes all institutional proceedings and enacts the presidential directive.
+              </p>
+              <form onSubmit={handleStage5PresidentSubmit} className="space-y-3">
+                <div>
+                  <label className="text-xs font-bold text-slate-800 dark:text-slate-200 block mb-1">
+                    President Executive Remarks / Official Directive *
+                  </label>
+                  <textarea
+                    required
+                    autoFocus
+                    rows={3}
+                    value={stage5Remarks}
+                    onChange={(e) => setStage5Remarks(e.target.value)}
+                    placeholder="Official presidential affirmation of punishment and final guidance directives..."
+                    className="w-full p-2.5 text-sm rounded-lg border border-slate-300 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white focus:ring-2 focus:ring-blue-600 outline-hidden"
+                  />
+                </div>
+                <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-200 dark:border-slate-800">
+                  <button
+                    type="button"
+                    onClick={() => setShowStage5PresidentDialog(false)}
+                    className="px-4 py-2 text-xs font-semibold rounded-lg border border-slate-300 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-300 cursor-pointer"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="submit"
+                    className="px-5 py-2 text-xs font-bold bg-blue-900 hover:bg-blue-800 text-white rounded-lg shadow-md cursor-pointer flex items-center gap-1.5"
+                  >
+                    <CheckCircle2 className="w-4 h-4" /> Affirm & Finalize Case
+                  </button>
+                </div>
+              </form>
+            </div>
+          </div>
+        )}
+
+        {/* PRESIDENT'S FINAL EXECUTIVE DECISION POP-UP MODAL WINDOW */}
+        {showPresidentFinalModal && (
+          <div className="fixed inset-0 z-[80] flex items-center justify-center bg-black/75 backdrop-blur-xs p-4 animate-in fade-in duration-150">
+            <div className="bg-white dark:bg-slate-900 rounded-2xl max-w-2xl w-full p-6 sm:p-8 shadow-2xl border-2 border-amber-400 dark:border-amber-500 space-y-6 relative max-h-[92vh] overflow-y-auto">
+              {/* Header */}
+              <div className="text-center space-y-1 pb-4 border-b-2 border-amber-500/40 relative">
+                <button
+                  type="button"
+                  onClick={() => setShowPresidentFinalModal(false)}
+                  className="absolute right-0 top-0 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 text-base font-bold p-1 cursor-pointer"
+                >
+                  ✕
+                </button>
+                <div className="inline-flex p-2 rounded-full bg-amber-500/10 text-amber-600 dark:text-amber-400 mb-1 border border-amber-400/30">
+                  <Award className="w-7 h-7" />
+                </div>
+                <p className="text-[11px] font-bold uppercase tracking-widest text-slate-500 dark:text-slate-400 font-mono">
+                  Republic of the Philippines • Department of Education
+                </p>
+                <h3 className="text-xl font-extrabold text-[#0f2444] dark:text-white uppercase tracking-wider">
+                  Office of the School President
+                </h3>
+                <p className="text-xs font-semibold text-amber-700 dark:text-amber-400 uppercase tracking-widest">
+                  Executive Final Disciplinary Order & Decree
+                </p>
+              </div>
+
+              {/* Case Particulars */}
+              <div className="p-4 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs">
+                <div>
+                  <span className="text-slate-400 block font-semibold uppercase text-[10px]">Case Number</span>
+                  <span className="font-mono font-bold text-blue-900 dark:text-blue-300 text-sm">{incident.case_number}</span>
+                </div>
+                <div>
+                  <span className="text-slate-400 block font-semibold uppercase text-[10px]">Student / Subject</span>
+                  <span className="font-bold text-slate-900 dark:text-white">{incident.student_name}</span>
+                  <span className="text-[10px] text-slate-500 block">{incident.student_grade || incident.grade} - {incident.student_section || incident.section}</span>
+                </div>
+                <div>
+                  <span className="text-slate-400 block font-semibold uppercase text-[10px]">Incident Offense</span>
+                  <span className="font-bold text-slate-900 dark:text-white">{incident.category}</span>
+                </div>
+                <div>
+                  <span className="text-slate-400 block font-semibold uppercase text-[10px]">Disciplinary Status</span>
+                  <span className="font-bold text-emerald-700 dark:text-emerald-400">Stage 5: Finalized</span>
+                </div>
+              </div>
+
+              {/* Board Hearing Context if available */}
+              {(incident.board_decision || incident.hearing_notes) && (
+                <div className="p-4 rounded-xl bg-purple-50 dark:bg-purple-950/40 border border-purple-200 dark:border-purple-800 text-xs space-y-1">
+                  <span className="font-bold uppercase tracking-wider text-purple-900 dark:text-purple-300 block">
+                    Board of Discipline Adjudication
+                  </span>
+                  <p className="text-slate-700 dark:text-slate-300">{incident.board_decision || 'Deliberation completed.'}</p>
+                </div>
+              )}
+
+              {/* Presidential Directive Block */}
+              <div className="p-5 rounded-xl bg-gradient-to-r from-blue-950 to-slate-900 text-white border border-amber-400/60 space-y-3">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-bold text-amber-300 uppercase tracking-wider flex items-center gap-1.5">
+                    <CheckCircle2 className="w-4 h-4 text-emerald-400" /> Executive Decree & Final Affirmation
+                  </span>
+                  <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-white/10 text-slate-300">
+                    RATIFIED BY PRESIDENT
+                  </span>
+                </div>
+                <blockquote className="text-base font-medium text-slate-100 italic border-l-4 border-amber-400 pl-4 py-1">
+                  "{presidentNotesClean}"
+                </blockquote>
+                <div className="pt-2 border-t border-white/10 flex items-center justify-between text-xs">
+                  <span className="text-slate-300">Sanction Enacted:</span>
+                  <span className="font-bold text-amber-300 text-sm">{presidentSanction}</span>
+                </div>
+              </div>
+
+              {/* Official Sign-off and Seal */}
+              <div className="pt-4 border-t border-slate-200 dark:border-slate-800 flex items-end justify-between">
+                <div className="space-y-1">
+                  <div className="text-[11px] font-mono text-slate-400">Decree Reference:</div>
+                  <div className="text-xs font-bold font-mono text-slate-700 dark:text-slate-300">
+                    EXEC-PRES-{incident.id}-{new Date().getFullYear()}
+                  </div>
+                  <div className="inline-flex items-center gap-1 text-[10px] text-emerald-600 dark:text-emerald-400 font-bold bg-emerald-50 dark:bg-emerald-950/60 px-2 py-0.5 rounded-full border border-emerald-300 dark:border-emerald-800 mt-1">
+                    <CheckCircle2 className="w-3 h-3" /> Legally Enforceable DepEd Disciplinary Order
+                  </div>
+                </div>
+
+                <div className="text-right space-y-1">
+                  <div className="w-36 h-0.5 bg-slate-400 dark:bg-slate-600 ml-auto mb-1" />
+                  <p className="text-sm font-extrabold text-slate-900 dark:text-white">Dr. Vicente Agoncillo</p>
+                  <p className="text-[11px] font-semibold text-slate-500 uppercase tracking-wide">School President</p>
+                </div>
+              </div>
+
+              {/* Footer Actions */}
+              <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-200 dark:border-slate-800">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowPresidentFinalModal(false);
+                    onGenerateSummons(incident);
+                  }}
+                  className="px-4 py-2 text-xs font-bold bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 text-slate-800 dark:text-slate-200 rounded-lg border border-slate-300 dark:border-slate-700 cursor-pointer flex items-center gap-1.5"
+                >
+                  <Printer className="w-4 h-4" /> Print Decree / Summons
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setShowPresidentFinalModal(false)}
+                  className="px-5 py-2 text-xs font-bold bg-blue-900 hover:bg-blue-800 text-white rounded-lg shadow-md cursor-pointer"
+                >
+                  Close Pop-up
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* Student & Involved Parties */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -90,7 +1170,7 @@ export default function IncidentDetailModal({
                 onClick={() => onViewStudent(incident.student_id)}
                 className="text-sm text-[#0f2444] dark:text-blue-400 hover:underline font-bold flex items-center gap-1"
               >
-                View Profile History <ExternalLink className="w-4 h-4" />
+                {isMinistro ? 'View Incident History' : 'View Profile History'} <ExternalLink className="w-4 h-4" />
               </button>
             </div>
           </div>

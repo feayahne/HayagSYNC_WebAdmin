@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import Modal from '../common/Modal';
 import StatusBadge from '../common/StatusBadge';
+import { useAuth } from '../../context/AuthContext';
 import { useIncidents } from '../../context/IncidentContext';
 import {
   User,
@@ -23,6 +24,7 @@ export default function StudentProfileModal({
   student,
   onSelectIncident,
 }) {
+  const { isMinistro } = useAuth();
   const { getStudentIncidents, isRepeatOffender } = useIncidents();
   const [statusFilter, setStatusFilter] = useState('ALL');
 
@@ -54,9 +56,19 @@ export default function StudentProfileModal({
     <Modal
       isOpen={isOpen}
       onClose={onClose}
-      title={`Confidential Student Disciplinary Record: ${student.name}`}
+      title={isMinistro ? `Incident History Archive: ${student.name}` : `Confidential Student Disciplinary Record: ${student.name}`}
       maxWidth="max-w-5xl"
     >
+      {/* DepEd Child Protection Privacy Notice for Ministrong Tagasubaybay */}
+      {isMinistro && (
+        <div className="mb-4 p-3.5 rounded-xl bg-amber-50 dark:bg-amber-950/40 border border-amber-300 dark:border-amber-800 text-amber-900 dark:text-amber-200 text-xs font-semibold flex items-center gap-2">
+          <Shield className="w-5 h-5 shrink-0 text-amber-600" />
+          <span>
+            <strong>DepEd Child Protection Policy (D.O. 40, s. 2012):</strong> Full personal profiles, enrollment records, and parent/guardian contact details are restricted to OSD and Board of Discipline. You are viewing authorized student incident histories only.
+          </span>
+        </div>
+      )}
+
       {/* 2-Column Layout: Left = Student Details, Right = Chronological Timeline */}
       <div className="grid grid-cols-1 md:grid-cols-12 gap-6 text-slate-800 dark:text-slate-200">
         {/* Left Column (5 of 12 cols): Student Photo and Details */}
@@ -74,7 +86,7 @@ export default function StudentProfileModal({
               {student.grade} • {student.section}
             </p>
             <p className="font-mono text-xs text-slate-500 mt-0.5">
-              LRN: {student.lrn}
+              LRN: {isMinistro ? '•••••••••••• (Protected)' : student.lrn}
             </p>
 
             {/* Repeat Offender Badge */}
@@ -90,19 +102,21 @@ export default function StudentProfileModal({
           <div className="space-y-3 text-sm">
             <div>
               <span className="text-xs font-bold text-slate-500 uppercase block">Adviser:</span>
-              <p className="font-semibold text-slate-900 dark:text-white">{student.adviser_name || 'Assigned Faculty'}</p>
+              <p className="font-semibold text-slate-900 dark:text-white">{student.adviser_name || student.adviser || 'Assigned Faculty'}</p>
             </div>
 
             <div>
               <span className="text-xs font-bold text-slate-500 uppercase block">Guardian Name:</span>
-              <p className="font-semibold text-slate-900 dark:text-white">{student.guardian_name}</p>
+              <p className="font-semibold text-slate-900 dark:text-white">
+                {isMinistro ? <span className="text-slate-400 italic font-normal">[Confidential - Restricted to OSD]</span> : student.guardian_name}
+              </p>
             </div>
 
             <div>
               <span className="text-xs font-bold text-slate-500 uppercase block">Guardian Contact:</span>
               <p className="font-semibold text-slate-900 dark:text-white flex items-center gap-1.5 mt-0.5">
                 <Phone className="w-4 h-4 text-slate-400" />
-                <span>{student.guardian_phone}</span>
+                <span>{isMinistro ? <span className="text-slate-400 italic font-normal">[Restricted]</span> : student.guardian_phone}</span>
               </p>
             </div>
 
@@ -110,7 +124,7 @@ export default function StudentProfileModal({
               <span className="text-xs font-bold text-slate-500 uppercase block">Email:</span>
               <p className="font-semibold text-slate-900 dark:text-white flex items-center gap-1.5 mt-0.5 truncate">
                 <Mail className="w-4 h-4 text-slate-400 shrink-0" />
-                <span className="truncate">{student.guardian_email}</span>
+                <span className="truncate">{isMinistro ? <span className="text-slate-400 italic font-normal">[Restricted]</span> : student.guardian_email}</span>
               </p>
             </div>
 
@@ -118,7 +132,7 @@ export default function StudentProfileModal({
               <span className="text-xs font-bold text-slate-500 uppercase block">Home Address:</span>
               <p className="font-semibold text-slate-900 dark:text-white flex items-start gap-1.5 mt-0.5">
                 <MapPin className="w-4 h-4 text-slate-400 shrink-0 mt-0.5" />
-                <span>{student.address}</span>
+                <span>{isMinistro ? <span className="text-slate-400 italic font-normal">[Restricted]</span> : student.address}</span>
               </p>
             </div>
 
@@ -131,16 +145,18 @@ export default function StudentProfileModal({
           </div>
 
           {/* Print Action Button */}
-          <div className="pt-3">
-            <button
-              type="button"
-              onClick={handlePrint}
-              className="w-full py-3 px-4 rounded-xl text-sm font-bold bg-blue-900 hover:bg-blue-800 text-white shadow-xs transition flex items-center justify-center gap-2"
-            >
-              <Printer className="w-4 h-4" />
-              <span>Print Disciplinary Transcript</span>
-            </button>
-          </div>
+          {!isMinistro && (
+            <div className="pt-3">
+              <button
+                type="button"
+                onClick={handlePrint}
+                className="w-full py-3 px-4 rounded-xl text-sm font-bold bg-blue-900 hover:bg-blue-800 text-white shadow-xs transition flex items-center justify-center gap-2"
+              >
+                <Printer className="w-4 h-4" />
+                <span>Print Disciplinary Transcript</span>
+              </button>
+            </div>
+          )}
         </div>
 
         {/* Right Column (7 of 12 cols): Vertical Timeline with Filter Tabs */}

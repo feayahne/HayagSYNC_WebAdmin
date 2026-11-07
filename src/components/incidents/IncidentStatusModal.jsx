@@ -56,6 +56,12 @@ export default function IncidentStatusModal({ isOpen, onClose, incident }) {
         effective_date: effectiveDate,
         grounds: expulsionGrounds || incident.description,
       };
+    } else if (targetStatus.startsWith('Escalated to ')) {
+      additionalPayload.escalation_reason = remark.trim();
+      additionalPayload.escalated_to = targetStatus.replace('Escalated to ', '');
+    } else if (targetStatus === 'Referred to Board of Discipline') {
+      additionalPayload.board_referred = true;
+      additionalPayload.hearing_notes = remark.trim();
     }
 
     const success = updateIncidentStatus(incident.id, targetStatus, remark.trim(), additionalPayload);
@@ -70,6 +76,10 @@ export default function IncidentStatusModal({ isOpen, onClose, incident }) {
   const statusOptions = [
     { value: 'Recent Report', label: 'Recent Report', disabled: false },
     { value: 'Ongoing Report', label: 'Ongoing Report (Investigation/Hearing in Progress)', disabled: false },
+    { value: 'Escalated to Principal', label: 'Escalate to Principal', disabled: false },
+    { value: 'Escalated to Ministrong Tagasubaybay', label: 'Escalate to Ministrong Tagasubaybay', disabled: false },
+    { value: 'Escalated to OSD', label: 'Escalate to OSD', disabled: false },
+    { value: 'Referred to Board of Discipline', label: 'Refer to Board of Discipline (Hearing)', disabled: !isOSD },
     { value: 'Appealed', label: 'Appealed (Contested by Guardian)', disabled: false },
     { value: 'Community Service', label: 'Community Service (Restitution Assigned)', disabled: false },
     {
@@ -203,10 +213,12 @@ export default function IncidentStatusModal({ isOpen, onClose, incident }) {
             </div>
           )}
 
-          {/* Written Justification Remark (Mandatory) */}
+          {/* Written Justification / Escalation Remark (Mandatory) */}
           <div>
             <label className="text-sm font-bold text-slate-900 dark:text-white block mb-1.5">
-              Written Justification / Hearing Remarks *
+              {targetStatus.includes('Escalat') || targetStatus.includes('Board')
+                ? 'Reason for Escalation / Referral *'
+                : 'Written Justification / Hearing Remarks *'}
             </label>
             <textarea
               rows={4}
@@ -216,7 +228,11 @@ export default function IncidentStatusModal({ isOpen, onClose, incident }) {
                 setRemark(e.target.value);
                 setErrorMsg('');
               }}
-              placeholder="Provide a clear, factual explanation of this status change, actions taken during the hearing, and agreements reached..."
+              placeholder={
+                targetStatus.includes('Escalat') || targetStatus.includes('Board')
+                  ? 'Provide a clear, detailed reason and notes for escalating or referring this case...'
+                  : 'Provide a clear, factual explanation of this status change, actions taken during the hearing, and agreements reached...'
+              }
               className="w-full p-3.5 text-base rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white focus:ring-2 focus:ring-blue-900 leading-relaxed"
             />
             <p className="text-xs text-slate-500 mt-1">
