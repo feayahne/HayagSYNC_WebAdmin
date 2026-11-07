@@ -12,6 +12,59 @@ import {
 } from '../data/initialSeedData';
 import { useAuth } from './AuthContext';
 
+// Helper to compute automatic grade-level assignments
+export const determineGradeAssignments = (studentGrade, studentSection, bullyGradeSection) => {
+  const grades = [];
+  for (const text of [studentGrade || '', studentSection || '', bullyGradeSection || '']) {
+    const match = text.match(/Grade\s*(\d+)/i);
+    if (match) {
+      const g = `Grade ${match[1]}`;
+      if (!grades.includes(g)) grades.push(g);
+    }
+  }
+  if (grades.length === 0) grades.push('Grade 7');
+
+  const ministroMap = {
+    'Grade 7': 'Gng. Corazon Alcantara (ministro.grade7@hayag.edu.ph)',
+    'Grade 8': 'G. Arnel Bautista (ministro.grade8@hayag.edu.ph)',
+    'Grade 9': 'Gng. Remedios Santos (ministro.grade9@hayag.edu.ph)',
+    'Grade 10': 'G. Danilo Cruz (ministro.grade10@hayag.edu.ph)',
+    'Grade 11': 'Gng. Jocelyn Reyes (ministro.grade11@hayag.edu.ph)',
+    'Grade 12': 'G. Fernando Garcia (ministro.grade12@hayag.edu.ph)',
+  };
+
+  const osdMap = {
+    'Grade 7': 'G. Renato Dalisay (osd.grade7@hayag.edu.ph)',
+    'Grade 8': 'Gng. Teresa Mercado (osd.grade8@hayag.edu.ph)',
+    'Grade 9': 'G. Victor Navarro (osd.grade9@hayag.edu.ph)',
+    'Grade 10': 'Gng. Angela Pineda (osd.grade10@hayag.edu.ph)',
+    'Grade 11': 'G. Marco Valenzuela (osd.grade11@hayag.edu.ph)',
+    'Grade 12': 'Gng. Caridad Soriano (osd.grade12@hayag.edu.ph)',
+  };
+
+  const assignedMinistros = grades.map((g) => ministroMap[g] || ministroMap['Grade 7']);
+  const assignedOsds = grades.map((g) => osdMap[g] || osdMap['Grade 7']);
+
+  const assignedPrincipals = [];
+  const hasJhs = grades.some((g) => ['Grade 7', 'Grade 8', 'Grade 9', 'Grade 10'].includes(g));
+  const hasShs = grades.some((g) => ['Grade 11', 'Grade 12'].includes(g));
+
+  if (hasJhs) assignedPrincipals.push('Dr. Alicia Magalong - JHS Principal (principal.jhs@hayag.edu.ph)');
+  if (hasShs) assignedPrincipals.push('Dr. Evelyn Morales - SHS Principal (principal.shs@hayag.edu.ph)');
+  if (assignedPrincipals.length === 0) assignedPrincipals.push('Dr. Alicia Magalong - JHS Principal (principal.jhs@hayag.edu.ph)');
+
+  return {
+    grades,
+    primaryGrade: grades[0],
+    ministros: assignedMinistros,
+    osds: assignedOsds,
+    principals: assignedPrincipals,
+    ministroName: assignedMinistros.join(' & '),
+    osdName: assignedOsds.join(' & '),
+    principalName: assignedPrincipals.join(' & '),
+  };
+};
+
 const IncidentContext = createContext();
 
 export const IncidentProvider = ({ children }) => {
@@ -19,27 +72,57 @@ export const IncidentProvider = ({ children }) => {
 
   const [students, setStudents] = useState(() => {
     const saved = localStorage.getItem('hayagsync_students');
-    return saved ? JSON.parse(saved) : INITIAL_STUDENTS;
+    if (saved) {
+      try {
+        const parsed = JSON.parse(saved);
+        if (parsed.length >= INITIAL_STUDENTS.length) return parsed;
+      } catch (_) {}
+    }
+    return INITIAL_STUDENTS;
   });
 
   const [incidents, setIncidents] = useState(() => {
     const saved = localStorage.getItem('hayagsync_incidents');
-    return saved ? JSON.parse(saved) : INITIAL_INCIDENTS;
+    if (saved) {
+      try {
+        const parsed = JSON.parse(saved);
+        if (parsed.length >= INITIAL_INCIDENTS.length) return parsed;
+      } catch (_) {}
+    }
+    return INITIAL_INCIDENTS;
   });
 
   const [appeals, setAppeals] = useState(() => {
     const saved = localStorage.getItem('hayagsync_appeals');
-    return saved ? JSON.parse(saved) : INITIAL_APPEALS;
+    if (saved) {
+      try {
+        const parsed = JSON.parse(saved);
+        if (parsed.length >= INITIAL_APPEALS.length) return parsed;
+      } catch (_) {}
+    }
+    return INITIAL_APPEALS;
   });
 
   const [communityServices, setCommunityServices] = useState(() => {
     const saved = localStorage.getItem('hayagsync_services');
-    return saved ? JSON.parse(saved) : INITIAL_COMMUNITY_SERVICES;
+    if (saved) {
+      try {
+        const parsed = JSON.parse(saved);
+        if (parsed.length >= INITIAL_COMMUNITY_SERVICES.length) return parsed;
+      } catch (_) {}
+    }
+    return INITIAL_COMMUNITY_SERVICES;
   });
 
   const [expulsions, setExpulsions] = useState(() => {
     const saved = localStorage.getItem('hayagsync_expulsions');
-    return saved ? JSON.parse(saved) : INITIAL_EXPULSIONS;
+    if (saved) {
+      try {
+        const parsed = JSON.parse(saved);
+        if (parsed.length >= INITIAL_EXPULSIONS.length) return parsed;
+      } catch (_) {}
+    }
+    return INITIAL_EXPULSIONS;
   });
 
   const [auditLogs, setAuditLogs] = useState(() => {
@@ -102,11 +185,58 @@ export const IncidentProvider = ({ children }) => {
         if (!repErr && repData && repData.length > 0) {
           const cloudIncidents = repData.map((r) => {
             const rawStatus = (r.status || 'Pending').toLowerCase();
-            let uiStatus = 'Recent Report';
-            if (rawStatus === 'resolved') uiStatus = 'Resolved';
-            else if (rawStatus === 'scheduled_meeting') uiStatus = 'Under Review';
-            else if (rawStatus === 'escalated') uiStatus = 'Escalated to OSD';
+            let uiStatus = r.status || 'Recent Report';
+            if (rawStatus === 'pending') uiStatus = 'Recent Report';
+            else if (rawStatus === 'resolved' || rawStatus.includes('finalized by school president')) uiStatus = 'Resolved';
+            else if (rawStatus.includes('initial intervention') || rawStatus === 'under review' || rawStatus === 'scheduled_meeting') uiStatus = 'Forwarded for Initial Intervention';
+            else if (rawStatus.includes('osd and principal')) uiStatus = 'Escalated to OSD and Principal';
+            else if (rawStatus.includes('board of discipline') || rawStatus === 'referred to board of discipline') uiStatus = 'Escalated to Board of Discipline';
+            else if (rawStatus.includes('school president') || rawStatus.includes('president review')) uiStatus = 'Forwarded to School President';
+            else if (rawStatus === 'escalated to principal') uiStatus = 'Escalated to Principal';
+            else if (rawStatus === 'escalated to ministrong tagasubaybay') uiStatus = 'Escalated to Ministrong Tagasubaybay';
+            else if (rawStatus === 'escalated to osd') uiStatus = 'Escalated to OSD';
             else if (rawStatus === 'appealed') uiStatus = 'Appealed';
+            else if (rawStatus === 'community service') uiStatus = 'Community Service';
+            else if (rawStatus === 'expelled') uiStatus = 'Expelled';
+            else if (rawStatus.includes('escalat')) uiStatus = r.status;
+
+            let stageNumber = 1;
+            let stageName = 'OSD Initial Assessment';
+            let currentHandlingOffice = 'Office of Student Discipline';
+
+            const hasPresidentAffirmation =
+              (r.discipline_notes || '').toLowerCase().includes('president') ||
+              (r.status || '').toLowerCase().includes('president');
+
+            if (hasPresidentAffirmation) {
+              stageNumber = 5;
+              stageName = 'School President Final Review';
+              currentHandlingOffice = 'Office of the School President';
+            } else if (rawStatus.includes('initial intervention') || rawStatus.includes('ministrong') || rawStatus.includes('under review') || rawStatus.includes('scheduled')) {
+              stageNumber = 2;
+              stageName = 'Ministrong Tagasubaybay & Section Adviser';
+              currentHandlingOffice = 'Ministrong Tagasubaybay & Adviser';
+            } else if (rawStatus.includes('osd and principal') || rawStatus.includes('escalated to principal') || rawStatus.includes('escalated to osd') || (rawStatus.includes('escalat') && !rawStatus.includes('board'))) {
+              stageNumber = 3;
+              stageName = 'OSD & Principal Joint Intervention';
+              currentHandlingOffice = 'Office of Student Discipline & Principal';
+            } else if (rawStatus.includes('board of discipline') || rawStatus.includes('referred to board')) {
+              stageNumber = 4;
+              stageName = 'Board of Discipline Deliberation';
+              currentHandlingOffice = 'Board of Discipline';
+            }
+
+            const isAnonymous = (r.report_source || '').toLowerCase() === 'anonymous' || r.parent_name === 'Anonymous Reporter';
+
+            const isHighPriority = r.is_high_priority === true ||
+              (r.urgency_level && (r.urgency_level.toLowerCase() === 'high' || r.urgency_level.toLowerCase() === 'critical')) ||
+              (r.category && (r.category.toLowerCase().includes('physical') || r.category.toLowerCase().includes('severe')));
+
+            let parsedWitnesses = [];
+            if (Array.isArray(r.witnesses)) parsedWitnesses = r.witnesses;
+            else if (typeof r.witnesses === 'string') {
+              try { parsedWitnesses = JSON.parse(r.witnesses); } catch (_) { parsedWitnesses = [r.witnesses]; }
+            }
 
             return {
               id: `rep_${r.id}`,
@@ -123,6 +253,7 @@ export const IncidentProvider = ({ children }) => {
               incident_location: r.incident_location || 'Campus',
               status: uiStatus,
               severity: r.urgency_level || 'Moderate',
+              is_high_priority: isHighPriority,
               evidence_url: r.evidence_url,
               evidence_verification_state: r.evidence_verification_state || 'Unverified',
               ai_summary: r.ai_summary,
@@ -132,17 +263,35 @@ export const IncidentProvider = ({ children }) => {
               appeal_count: r.appeal_count || 0,
               bully_name: r.bully_name,
               bully_grade_section: r.bully_grade_section,
+              witnesses: parsedWitnesses,
+              is_anonymous: isAnonymous,
+              report_source: r.report_source || (isAnonymous ? 'Anonymous' : 'Registered Parent'),
+              stageNumber,
+              stageName,
+              currentHandlingOffice,
+              board_findings: r.hearing_notes || r.board_recommendations || '',
+              board_decision: r.board_decision || '',
+              punishment_imposed: r.discipline_action || '',
+              president_notes: (r.discipline_notes || '').replace(/^President Final Affirmation:\s*/i, ''),
+              president_finalized: hasPresidentAffirmation,
+              president_reviewed: hasPresidentAffirmation,
+              escalation_reason: r.escalation_reason,
+              escalation_notes: r.escalation_notes,
+              escalated_to: r.escalated_to,
+              hearing_notes: r.hearing_notes,
+              board_recommendations: r.board_recommendations,
+              board_referred: r.board_referred || uiStatus === 'Referred to Board of Discipline' || stageNumber >= 4,
               created_at: r.created_at,
               updated_at: r.updated_at,
-              reporter_name: r.parent_name || 'Parent',
-              reporter_role: 'Parent',
+              reporter_name: isAnonymous ? 'Anonymous Reporter' : (r.parent_name || 'Parent'),
+              reporter_role: isAnonymous ? 'Anonymous' : 'Parent',
               status_history: [
                 {
                   from_status: 'None',
                   to_status: uiStatus,
-                  changed_by: r.parent_name || 'System',
-                  role: 'Reporter',
-                  remark: 'Cloud synced record from Supabase database.',
+                  changed_by: isAnonymous ? 'Anonymous Reporter' : (r.parent_name || 'System'),
+                  role: isAnonymous ? 'Anonymous' : 'Reporter',
+                  remark: isAnonymous ? 'Anonymous report filed through platform.' : 'Cloud synced record from Supabase database.',
                   timestamp: r.created_at,
                 }
               ]
@@ -174,6 +323,18 @@ export const IncidentProvider = ({ children }) => {
     };
 
     loadFromSupabase();
+
+    // Supabase Real-time channel for instant sync across Web and Mobile
+    const channel = supabase
+      .channel('public:reports:sync')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'reports' }, () => {
+        loadFromSupabase();
+      })
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
   }, []);
 
   // --- Audit Logger ---
@@ -257,6 +418,358 @@ export const IncidentProvider = ({ children }) => {
     return newIncident;
   };
 
+  // --- Create Anonymous Report (Zero identity logged, full protection) ---
+  const createAnonymousReport = async (data) => {
+    let cloudId = null;
+    try {
+      const { data: inserted, error } = await supabase.from('reports').insert({
+        student_name: data.student_name || 'Unspecified Student',
+        student_grade: data.student_grade || '',
+        student_section: data.student_section || '',
+        title: data.title || `${data.category || 'Incident'} Report (Anonymous)`,
+        category: data.category || 'Bullying Incident',
+        description: data.description || '',
+        incident_date: data.incident_date || new Date().toISOString(),
+        incident_location: data.incident_location || 'Campus',
+        urgency_level: data.urgency_level || 'Moderate',
+        bully_name: data.bully_name || null,
+        bully_grade_section: data.bully_grade_section || null,
+        witnesses: data.witnesses || null,
+        evidence_url: data.evidence_url || null,
+        status: 'Pending',
+        report_source: 'Anonymous',
+        parent_name: 'Anonymous Reporter',
+      }).select().single();
+
+      if (!error && inserted) {
+        cloudId = inserted.id;
+        await supabase.from('timeline_events').insert({
+          report_id: cloudId,
+          title: 'Anonymous Report Filed',
+          description: 'Incident report submitted directly without account authentication. Identity protected under RA 10173.',
+          actor_name: 'Anonymous Reporter',
+          actor_role: 'Anonymous User',
+        });
+      }
+    } catch (e) {
+      console.warn('Could not insert anonymous report to Supabase:', e);
+    }
+
+    const nextNum = cloudId || (incidents.length + 1);
+    const caseNum = `INC-${new Date().getFullYear()}-${String(nextNum).padStart(3, '0')}`;
+    const newIncident = {
+      id: cloudId ? `rep_${cloudId}` : `inc_${Date.now()}`,
+      numeric_id: cloudId,
+      case_number: caseNum,
+      ...data,
+      is_anonymous: true,
+      report_source: 'Anonymous',
+      reporter_name: 'Anonymous Reporter',
+      reporter_role: 'Anonymous',
+      status: 'Recent Report',
+      stageNumber: 1,
+      stageName: 'OSD Initial Assessment',
+      currentHandlingOffice: 'Office of Student Discipline',
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+      status_history: [
+        {
+          from_status: 'None',
+          to_status: 'Recent Report',
+          changed_by: 'Anonymous Reporter',
+          role: 'Anonymous',
+          remark: 'Anonymous report submitted via Public Portal. Protected identity.',
+          timestamp: new Date().toISOString(),
+        }
+      ]
+    };
+
+    setIncidents((prev) => [newIncident, ...prev]);
+
+    const newNotif = {
+      id: `notif_${Date.now()}`,
+      role: 'all_admin',
+      title: 'New Anonymous Incident Report Filed',
+      message: `Anonymous report ${caseNum} submitted (${data.category}) - Awaiting Stage 1 OSD assessment.`,
+      type: 'report',
+      is_read: false,
+      timestamp: new Date().toISOString(),
+      link: newIncident.id,
+    };
+    setNotifications((prev) => [newNotif, ...prev]);
+
+    logAudit('ANONYMOUS_REPORT_CREATE', 'Incident Report', caseNum, `New anonymous incident report filed`);
+    return newIncident;
+  };
+
+  // --- Stage 1 -> Stage 2: Forward for Initial Intervention ---
+  const forwardForInitialIntervention = async (incidentId, notes = '') => {
+    const rawId = incidentId.replace('rep_', '').replace('inc_', '');
+    const numId = parseInt(rawId, 10);
+    const newStatus = 'Forwarded for Initial Intervention';
+
+    const inc = incidents.find((i) => i.id === incidentId || i.numeric_id === numId);
+    const targetCaseNum = inc?.case_number || `Case #${rawId}`;
+    const targetStudent = inc?.student_name || 'Student';
+    const targetSection = inc?.student_section || inc?.section || 'Grade Section';
+
+    if (!isNaN(numId) && numId > 0) {
+      try {
+        await supabase.from('reports').update({
+          status: newStatus,
+          discipline_notes: notes || null,
+          escalated_to: 'Ministrong Tagasubaybay & Section Adviser',
+          updated_at: new Date().toISOString(),
+        }).eq('id', numId);
+
+        await supabase.from('timeline_events').insert({
+          report_id: numId,
+          title: 'Stage 1 Completed: Forwarded for Initial Intervention',
+          description: notes ? `Assessment Notes: ${notes}` : 'OSD completed initial assessment and referred case for joint intervention.',
+          actor_name: currentUser?.name || 'OSD Officer',
+          actor_role: 'OSD',
+        });
+      } catch (e) {
+        console.warn('Could not sync stage 1 forward to Supabase:', e);
+      }
+    }
+
+    // Push instant notification to Section Adviser & Ministrong Tagasubaybay
+    const newNotif = {
+      id: `notif_${Date.now()}`,
+      role: 'all_admin',
+      title: 'Action Required: Forwarded for Initial Intervention',
+      message: `${targetCaseNum} (${targetStudent} - ${targetSection}) has been forwarded by OSD to Ministrong Tagasubaybay & Section Adviser for Stage 2 Joint Intervention.`,
+      type: 'intervention',
+      is_read: false,
+      timestamp: new Date().toISOString(),
+      link: incidentId,
+    };
+    setNotifications((prev) => [newNotif, ...prev]);
+
+    return updateIncidentStatus(incidentId, newStatus, notes || 'Forwarded for Initial Intervention by OSD', {
+      stageNumber: 2,
+      stageName: 'Ministrong Tagasubaybay & Section Adviser',
+      currentHandlingOffice: 'Ministrong Tagasubaybay & Adviser',
+      escalated_to: 'Ministrong Tagasubaybay & Section Adviser',
+    });
+  };
+
+  // --- Stage 2 -> Resolved: Resolve Initial Intervention ---
+  const resolveInitialIntervention = async (incidentId, restorativeAction, notes = '') => {
+    const rawId = incidentId.replace('rep_', '').replace('inc_', '');
+    const numId = parseInt(rawId, 10);
+    const newStatus = 'Resolved';
+
+    if (!isNaN(numId) && numId > 0) {
+      try {
+        await supabase.from('reports').update({
+          status: 'resolved',
+          discipline_action: restorativeAction || 'Restorative Intervention Completed',
+          discipline_notes: notes || null,
+          updated_at: new Date().toISOString(),
+        }).eq('id', numId);
+
+        await supabase.from('timeline_events').insert({
+          report_id: numId,
+          title: 'Case Resolved - Initial Intervention Successful',
+          description: `Action: ${restorativeAction || 'Restorative Intervention'}. Notes: ${notes}`,
+          actor_name: currentUser?.name || 'Authorized Official',
+          actor_role: currentUser?.role || 'Staff',
+        });
+      } catch (e) {
+        console.warn('Could not sync stage 2 resolution to Supabase:', e);
+      }
+    }
+
+    return updateIncidentStatus(incidentId, newStatus, notes || 'Case resolved at Stage 2 joint intervention.', {
+      discipline_action: restorativeAction,
+      discipline_notes: notes,
+    });
+  };
+
+  // --- Stage 2 -> Stage 3: Escalate to OSD and Principal ---
+  const escalateToOsdAndPrincipal = async (incidentId, reason, notes = '') => {
+    const rawId = incidentId.replace('rep_', '').replace('inc_', '');
+    const numId = parseInt(rawId, 10);
+    const newStatus = 'Escalated to OSD and Principal';
+
+    if (!isNaN(numId) && numId > 0) {
+      try {
+        await supabase.from('reports').update({
+          status: newStatus,
+          escalation_reason: reason,
+          escalation_notes: notes || null,
+          updated_at: new Date().toISOString(),
+        }).eq('id', numId);
+
+        await supabase.from('timeline_events').insert({
+          report_id: numId,
+          title: 'Stage 2 Escalation: Escalated to OSD and Principal',
+          description: `Reason: ${reason}. Notes: ${notes}`,
+          actor_name: currentUser?.name || 'Assigned Staff',
+          actor_role: currentUser?.role || 'Staff',
+        });
+      } catch (e) {
+        console.warn('Could not sync stage 2 escalation to Supabase:', e);
+      }
+    }
+
+    return updateIncidentStatus(incidentId, newStatus, `Escalation Reason: ${reason}`, {
+      stageNumber: 3,
+      stageName: 'OSD & Principal Joint Intervention',
+      currentHandlingOffice: 'Office of Student Discipline & Principal',
+      escalation_reason: reason,
+      escalation_notes: notes,
+    });
+  };
+
+  // --- Stage 3 -> Resolved: Resolve Case with Disciplinary Action ---
+  const resolveOsdAndPrincipal = async (incidentId, disciplineAction, notes = '') => {
+    const rawId = incidentId.replace('rep_', '').replace('inc_', '');
+    const numId = parseInt(rawId, 10);
+    const newStatus = 'Resolved';
+
+    if (!isNaN(numId) && numId > 0) {
+      try {
+        await supabase.from('reports').update({
+          status: 'resolved',
+          discipline_action: disciplineAction,
+          discipline_notes: notes || null,
+          updated_at: new Date().toISOString(),
+        }).eq('id', numId);
+
+        await supabase.from('timeline_events').insert({
+          report_id: numId,
+          title: 'Case Resolved - Disciplinary Sanction Imposed',
+          description: `Disciplinary Action: ${disciplineAction}. Notes: ${notes}`,
+          actor_name: currentUser?.name || 'OSD / Principal',
+          actor_role: currentUser?.role || 'Staff',
+        });
+      } catch (e) {
+        console.warn('Could not sync stage 3 resolution to Supabase:', e);
+      }
+    }
+
+    return updateIncidentStatus(incidentId, newStatus, notes || 'Case resolved by OSD & Principal joint intervention.', {
+      discipline_action: disciplineAction,
+      discipline_notes: notes,
+    });
+  };
+
+  // --- Stage 3 -> Stage 4: Escalate to Board of Discipline ---
+  const escalateToBoard = async (incidentId, reason, notes = '') => {
+    const rawId = incidentId.replace('rep_', '').replace('inc_', '');
+    const numId = parseInt(rawId, 10);
+    const newStatus = 'Escalated to Board of Discipline';
+
+    if (!isNaN(numId) && numId > 0) {
+      try {
+        await supabase.from('reports').update({
+          status: newStatus,
+          board_referred: true,
+          escalation_reason: reason,
+          escalation_notes: notes || null,
+          updated_at: new Date().toISOString(),
+        }).eq('id', numId);
+
+        await supabase.from('timeline_events').insert({
+          report_id: numId,
+          title: 'Stage 3 Escalation: Escalated to Board of Discipline',
+          description: `Referred for formal institutional hearing. Reason: ${reason}. Notes: ${notes}`,
+          actor_name: currentUser?.name || 'OSD / Principal',
+          actor_role: currentUser?.role || 'OSD',
+        });
+      } catch (e) {
+        console.warn('Could not sync stage 3 escalation to Supabase:', e);
+      }
+    }
+
+    return updateIncidentStatus(incidentId, newStatus, `Referred to Board: ${reason}`, {
+      stageNumber: 4,
+      stageName: 'Board of Discipline Deliberation',
+      currentHandlingOffice: 'Board of Discipline',
+      board_referred: true,
+      escalation_reason: reason,
+      escalation_notes: notes,
+    });
+  };
+
+  // --- Stage 4 -> Stage 5: Finalize Board Decision & Forward to President ---
+  const finalizeBoardDecision = async (incidentId, findings, decision, punishment) => {
+    const rawId = incidentId.replace('rep_', '').replace('inc_', '');
+    const numId = parseInt(rawId, 10);
+    const newStatus = 'Forwarded to School President';
+
+    if (!isNaN(numId) && numId > 0) {
+      try {
+        await supabase.from('reports').update({
+          status: newStatus,
+          hearing_notes: findings,
+          board_decision: decision,
+          discipline_action: punishment,
+          updated_at: new Date().toISOString(),
+        }).eq('id', numId);
+
+        await supabase.from('timeline_events').insert({
+          report_id: numId,
+          title: 'Stage 4 Completed: Board Decision & Punishment Finalized',
+          description: `Findings: ${findings}. Decision: ${decision}. Punishment: ${punishment}. Forwarded to President.`,
+          actor_name: currentUser?.name || 'Board Chairman',
+          actor_role: 'Board of Discipline',
+        });
+      } catch (e) {
+        console.warn('Could not sync board decision to Supabase:', e);
+      }
+    }
+
+    return updateIncidentStatus(incidentId, newStatus, `Board Findings: ${findings}`, {
+      stageNumber: 5,
+      stageName: 'School President Final Review',
+      currentHandlingOffice: 'Office of the School President',
+      board_findings: findings,
+      board_decision: decision,
+      punishment_imposed: punishment,
+    });
+  };
+
+  // --- Stage 5 -> Finalized: Complete School President Final Review ---
+  const completePresidentReview = async (incidentId, remarks = '') => {
+    const rawId = incidentId.replace('rep_', '').replace('inc_', '');
+    const numId = parseInt(rawId, 10);
+    const newStatus = 'Resolved';
+
+    if (!isNaN(numId) && numId > 0) {
+      try {
+        await supabase.from('reports').update({
+          status: 'resolved',
+          discipline_notes: remarks ? `President Final Affirmation: ${remarks}` : 'Affirmed by School President',
+          updated_at: new Date().toISOString(),
+        }).eq('id', numId);
+
+        await supabase.from('timeline_events').insert({
+          report_id: numId,
+          title: 'Stage 5 Completed: Finalized by School President',
+          description: remarks ? `Remarks: ${remarks}` : 'Executive review completed and board decision affirmed.',
+          actor_name: currentUser?.name || 'Dr. Vicente Agoncillo',
+          actor_role: 'School President',
+        });
+      } catch (e) {
+        console.warn('Could not sync president review to Supabase:', e);
+      }
+    }
+
+    return updateIncidentStatus(incidentId, newStatus, remarks || 'Final executive review affirmed by School President.', {
+      president_notes: remarks,
+      president_finalized: true,
+      president_reviewed: true,
+      stageNumber: 5,
+      stageName: 'School President Final Review',
+      currentHandlingOffice: 'Office of the School President',
+      status: 'Resolved',
+    });
+  };
+
   // --- Update Incident Status ---
   const updateIncidentStatus = async (incidentId, newStatus, remark, additionalPayload = {}) => {
     const inc = incidents.find((i) => i.id === incidentId);
@@ -267,16 +780,16 @@ export const IncidentProvider = ({ children }) => {
     const numId = inc.numeric_id || parseInt(rawId, 10);
     if (!isNaN(numId) && numId > 0) {
       try {
-        let dbStatus = 'Pending';
+        let dbStatus = newStatus;
         if (newStatus === 'Resolved') dbStatus = 'resolved';
         else if (newStatus === 'Under Review' || newStatus === 'Scheduled Meeting') dbStatus = 'scheduled_meeting';
-        else if (newStatus.includes('Escalat')) dbStatus = 'Escalated';
         else if (newStatus === 'Appealed') dbStatus = 'appealed';
 
         await supabase.from('reports').update({
           status: dbStatus,
-          discipline_action: additionalPayload?.disciplineAction || null,
-          discipline_notes: remark || null,
+          discipline_action: additionalPayload?.disciplineAction || additionalPayload?.discipline_action || null,
+          discipline_notes: remark || additionalPayload?.discipline_notes || null,
+          escalated_to: additionalPayload?.escalated_to || null,
           updated_at: new Date().toISOString(),
         }).eq('id', numId);
 
@@ -346,6 +859,118 @@ export const IncidentProvider = ({ children }) => {
     ]);
 
     return true;
+  };
+
+  // --- Case Escalation Helper ---
+  const escalateIncident = async (incidentId, targetRole, reason, notes = '') => {
+    let newStatus = `Escalated to ${targetRole}`;
+    if (targetRole.toLowerCase().includes('ministro')) {
+      newStatus = 'Escalated to Ministrong Tagasubaybay';
+    } else if (targetRole.toLowerCase().includes('osd')) {
+      newStatus = 'Escalated to OSD';
+    } else if (targetRole.toLowerCase().includes('principal')) {
+      newStatus = 'Escalated to Principal';
+    }
+
+    const payload = {
+      escalation_reason: reason,
+      escalation_notes: notes,
+      escalated_to: targetRole,
+    };
+
+    // If syncing with Supabase
+    const rawId = incidentId.replace('rep_', '').replace('inc_', '');
+    const numId = parseInt(rawId, 10);
+    if (!isNaN(numId) && numId > 0) {
+      try {
+        await supabase.from('reports').update({
+          status: newStatus,
+          escalation_reason: reason,
+          escalation_notes: notes,
+          escalated_to: targetRole,
+        }).eq('id', numId);
+
+        await supabase.from('timeline_events').insert({
+          report_id: numId,
+          title: `Case Escalated to ${targetRole}`,
+          description: notes ? `Reason: ${reason}. Notes: ${notes}` : `Reason: ${reason}`,
+          actor_name: currentUser?.name || 'Authorized Official',
+          actor_role: currentUser?.role || 'Staff',
+        });
+      } catch (e) {
+        console.warn('Could not sync escalation to Supabase:', e);
+      }
+    }
+
+    return updateIncidentStatus(incidentId, newStatus, `Escalation Reason: ${reason}`, payload);
+  };
+
+  // --- Refer Case to Board of Discipline ---
+  const referToBoard = async (incidentId, hearingNotes = '') => {
+    const payload = {
+      board_referred: true,
+      hearing_notes: hearingNotes,
+    };
+
+    const rawId = incidentId.replace('rep_', '').replace('inc_', '');
+    const numId = parseInt(rawId, 10);
+    if (!isNaN(numId) && numId > 0) {
+      try {
+        await supabase.from('reports').update({
+          status: 'Referred to Board of Discipline',
+          board_referred: true,
+          hearing_notes: hearingNotes,
+        }).eq('id', numId);
+
+        await supabase.from('timeline_events').insert({
+          report_id: numId,
+          title: 'Case Referred to Board of Discipline',
+          description: 'Referred for formal hearing and institutional disciplinary board deliberation.',
+          actor_name: currentUser?.name || 'OSD Official',
+          actor_role: currentUser?.role || 'OSD',
+        });
+      } catch (e) {
+        console.warn('Could not sync board referral to Supabase:', e);
+      }
+    }
+
+    return updateIncidentStatus(incidentId, 'Referred to Board of Discipline', 'Case formally referred to the Board of Discipline.', payload);
+  };
+
+  // --- Record Board of Discipline Deliberation & Decision ---
+  const recordBoardDeliberation = async (incidentId, hearingNotes, recommendations, decision) => {
+    const payload = {
+      hearing_notes: hearingNotes,
+      board_recommendations: recommendations,
+      board_decision: decision,
+      board_referred: true,
+    };
+
+    const rawId = incidentId.replace('rep_', '').replace('inc_', '');
+    const numId = parseInt(rawId, 10);
+    if (!isNaN(numId) && numId > 0) {
+      try {
+        await supabase.from('reports').update({
+          status: decision ? `Resolved (${decision})` : 'Under Review (Board Hearing)',
+          hearing_notes: hearingNotes,
+          board_recommendations: recommendations,
+          board_decision: decision,
+        }).eq('id', numId);
+
+        await supabase.from('timeline_events').insert({
+          report_id: numId,
+          title: 'Board of Discipline Hearing Conducted',
+          description: `Recommendations: ${recommendations}. Decision: ${decision || 'Pending Final Resolution'}`,
+          actor_name: currentUser?.name || 'Board Chairman',
+          actor_role: 'Board of Discipline',
+        });
+      } catch (e) {
+        console.warn('Could not sync board deliberation to Supabase:', e);
+      }
+    }
+
+    const finalStatus = decision ? `Resolved` : 'Ongoing Report';
+    return updateIncidentStatus(incidentId, finalStatus, `Board Findings: ${recommendations}`, payload);
   };
 
   // --- Assign Handler ---
@@ -574,7 +1199,19 @@ export const IncidentProvider = ({ children }) => {
         notifications,
         settings,
         createIncident,
+        createAnonymousReport,
         updateIncidentStatus,
+        forwardForInitialIntervention,
+        resolveInitialIntervention,
+        escalateToOsdAndPrincipal,
+        resolveOsdAndPrincipal,
+        escalateToBoard,
+        finalizeBoardDecision,
+        completePresidentReview,
+        determineGradeAssignments,
+        escalateIncident,
+        referToBoard,
+        recordBoardDeliberation,
         assignHandler,
         submitAppeal,
         reviewAppeal,

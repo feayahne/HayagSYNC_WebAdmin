@@ -2,8 +2,8 @@ import React from 'react';
 import { useAuth } from '../context/AuthContext';
 import { ShieldAlert, Lock, ArrowLeft, UserCheck } from 'lucide-react';
 
-export default function AccessRestrictedPage({ onGoToSubmit, onSwitchRole }) {
-  const { currentUser } = useAuth();
+export default function AccessRestrictedPage({ onGoToSubmit }) {
+  const { currentUser, logout } = useAuth();
 
   return (
     <div className="min-h-[70vh] flex items-center justify-center p-6">
@@ -40,15 +40,15 @@ export default function AccessRestrictedPage({ onGoToSubmit, onSwitchRole }) {
         <div className="flex flex-col sm:flex-row gap-2.5 pt-2">
           <button
             onClick={onGoToSubmit}
-            className="flex-1 py-2.5 px-4 bg-teal-600 hover:bg-teal-700 text-white rounded-xl text-xs font-bold shadow-md transition flex items-center justify-center gap-1.5"
+            className="flex-1 py-2.5 px-4 bg-teal-600 hover:bg-teal-700 text-white rounded-xl text-xs font-bold shadow-md transition flex items-center justify-center gap-1.5 cursor-pointer"
           >
             <ArrowLeft className="w-4 h-4" /> Go to Submit Portal
           </button>
           <button
-            onClick={() => onSwitchRole && onSwitchRole('osd')}
-            className="flex-1 py-2.5 px-4 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-800 dark:text-slate-200 rounded-xl text-xs font-bold transition flex items-center justify-center gap-1.5"
+            onClick={logout}
+            className="flex-1 py-2.5 px-4 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-800 dark:text-slate-200 rounded-xl text-xs font-bold transition flex items-center justify-center gap-1.5 cursor-pointer"
           >
-            <UserCheck className="w-4 h-4 text-teal-600" /> Switch to Admin Account
+            <UserCheck className="w-4 h-4 text-teal-600" /> Sign Out / Change Account
           </button>
         </div>
       </div>

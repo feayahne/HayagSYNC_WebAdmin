@@ -23,7 +23,7 @@ export default function Topbar({
   onOpenTour,
 }) {
   const { students, notifications } = useIncidents();
-  const { currentUser, isOSD } = useAuth();
+  const { currentUser, isOSD, isMinistro, isPrincipal, isAdviser, isBoard, isPresident } = useAuth();
   const [query, setQuery] = useState('');
   const [suggestions, setSuggestions] = useState([]);
   const [isSearching, setIsSearching] = useState(false);
@@ -225,7 +225,19 @@ export default function Topbar({
               {currentUser?.name}
             </p>
             <p className="text-xs font-semibold text-blue-900 dark:text-blue-300 truncate">
-              {isOSD ? 'OSD Head (Final Authority)' : 'Ministrong Tagasubaybay'}
+              {isAdviser
+                ? `Section Adviser • ${currentUser?.assigned_section || ''}`
+                : isPrincipal
+                ? `School Principal • ${currentUser?.assigned_section || (currentUser?.email?.includes('jhs') ? 'Grades 7–10' : 'Grades 11–12')}`
+                : isMinistro
+                ? `Ministrong Tagasubaybay • ${currentUser?.assigned_section || 'Assigned Grade'}`
+                : isOSD
+                ? `OSD Discipline Officer • ${currentUser?.assigned_section || 'Campus Disciplinary Head'}`
+                : isBoard
+                ? 'Board of Discipline'
+                : isPresident
+                ? 'School President'
+                : currentUser?.title || 'Staff Official'}
             </p>
           </div>
         </div>
